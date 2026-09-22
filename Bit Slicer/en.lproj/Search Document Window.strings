@@ -5,6 +5,9 @@
 /* Class = "NSMenuItem"; title = "Show in Debugger"; ObjectID = "100786"; */
 "100786.title" = "Show in Debugger";
 
+/* Class = "NSMenuItem"; title = "Watch Write Accesses…"; ObjectID = "100787"; */
+"100787.title" = "Watch Write Accesses…";
+
 /* Class = "NSMenuItem"; title = "nop_variable"; ObjectID = "100797"; */
 "100797.title" = "nop_variable";
 
@@ -59,6 +62,9 @@
 /* Class = "NSMenuItem"; title = "Pointer"; ObjectID = "100859"; */
 "100859.title" = "Pointer";
 
+/* Class = "NSMenuItem"; title = "Watch Read & Write Accesses…"; ObjectID = "100885"; */
+"100885.title" = "Watch Read & Write Accesses…";
+
 /* Class = "NSMenuItem"; title = "Copy Address"; ObjectID = "100889"; */
 "100889.title" = "Copy Address";
 
@@ -76,6 +82,9 @@
 
 /* Class = "NSTextFieldCell"; title = "Text Cell"; ObjectID = "3G0-oE-PRY"; */
 "3G0-oE-PRY.title" = "Text Cell";
+
+/* Class = "NSMenuItem"; title = "|Offset| ≤"; ObjectID = "4Bc-vD-9HW"; */
+"4Bc-vD-9HW.title" = "|Offset| ≤";
 
 /* Class = "NSTextFieldCell"; title = "displaying_or_found_x_variables"; ObjectID = "6Kr-rx-QwW"; */
 "6Kr-rx-QwW.title" = "displaying_or_found_x_variables";
@@ -104,6 +113,15 @@
 /* Class = "NSTextFieldCell"; title = "Flags:"; ObjectID = "AOM-F4-uKc"; */
 "AOM-F4-uKc.title" = "Flags:";
 
+/* Class = "NSMenuItem"; title = " Offset  ≤"; ObjectID = "BrH-0b-bdg"; */
+"BrH-0b-bdg.title" = " Offset  ≤";
+
+/* Class = "NSToolbarItem"; label = "Search Type"; ObjectID = "D2T-dX-W9r"; */
+"D2T-dX-W9r.label" = "Search Type";
+
+/* Class = "NSToolbarItem"; paletteLabel = "Search Type"; ObjectID = "D2T-dX-W9r"; */
+"D2T-dX-W9r.paletteLabel" = "Search Type";
+
 /* Class = "NSMenuItem"; title = "16-bit Integer"; ObjectID = "DZX-8q-NsT"; */
 "DZX-8q-NsT.title" = "16-bit Integer";
 
@@ -122,14 +140,14 @@
 /* Class = "NSMenuItem"; title = "16-bit String"; ObjectID = "JPE-UV-Y18"; */
 "JPE-UV-Y18.title" = "16-bit String";
 
-/* Class = "NSToolbarItem"; label = "Operator"; ObjectID = "LxQ-Vs-KYQ"; */
-"LxQ-Vs-KYQ.label" = "Operator";
-
-/* Class = "NSToolbarItem"; paletteLabel = "Operator"; ObjectID = "LxQ-Vs-KYQ"; */
-"LxQ-Vs-KYQ.paletteLabel" = "Operator";
+/* Class = "NSMenuItem"; title = "Watch Write Accesses to Base Address…"; ObjectID = "LKg-Ix-res"; */
+"LKg-Ix-res.title" = "Watch Write Accesses to Base Address…";
 
 /* Class = "NSMenuItem"; title = "8-bit Integer"; ObjectID = "QE7-Hz-jsV"; */
 "QE7-Hz-jsV.title" = "8-bit Integer";
+
+/* Class = "NSMenuItem"; title = " Offset  ="; ObjectID = "RUR-Zy-RpG"; */
+"RUR-Zy-RpG.title" = " Offset  =";
 
 /* Class = "NSMenu"; title = "OtherViews"; ObjectID = "Rd8-r5-KgJ"; */
 "Rd8-r5-KgJ.title" = "OtherViews";
@@ -139,6 +157,12 @@
 
 /* Class = "NSMenu"; title = "OtherViews"; ObjectID = "UJa-HE-MpN"; */
 "UJa-HE-MpN.title" = "OtherViews";
+
+/* Class = "NSTextFieldCell"; title = "Max Levels:"; ObjectID = "UOD-vt-IHJ"; */
+"UOD-vt-IHJ.title" = "Max Levels:";
+
+/* Class = "NSMenuItem"; title = "Watch Read & Write Accesses to Base Address…"; ObjectID = "Ule-bH-KzF"; */
+"Ule-bH-KzF.title" = "Watch Read & Write Accesses to Base Address…";
 
 /* Class = "NSMenuItem"; title = "8-bit String"; ObjectID = "XPu-Mw-Wzt"; */
 "XPu-Mw-Wzt.title" = "8-bit String";
@@ -154,9 +178,6 @@
 
 /* Class = "NSTableColumn"; headerCell.title = "Value"; ObjectID = "aom-rv-8rE"; */
 "aom-rv-8rE.headerCell.title" = "Value";
-
-/* Class = "NSMenu"; title = "OtherViews"; ObjectID = "cNT-1t-BfB"; */
-"cNT-1t-BfB.title" = "OtherViews";
 
 /* Class = "NSMenuItem"; title = "relativize_variable"; ObjectID = "drP-6a-Xg6"; */
 "drP-6a-Xg6.title" = "relativize_variable";
@@ -182,26 +203,32 @@
 /* Class = "NSMenuItem"; title = "Float"; ObjectID = "luK-87-e1C"; */
 "luK-87-e1C.title" = "Float";
 
-/* Class = "NSToolbarItem"; label = "Store Values"; ObjectID = "q4V-IG-gxK"; */
-"q4V-IG-gxK.label" = "Store Values";
+/* Class = "NSToolbarItem"; label = "Operator"; ObjectID = "moB-Wu-fvx"; */
+"moB-Wu-fvx.label" = "Operator";
 
-/* Class = "NSToolbarItem"; paletteLabel = "Store Values"; ObjectID = "q4V-IG-gxK"; */
-"q4V-IG-gxK.paletteLabel" = "Store Values";
+/* Class = "NSToolbarItem"; paletteLabel = "Operator"; ObjectID = "moB-Wu-fvx"; */
+"moB-Wu-fvx.paletteLabel" = "Operator";
 
 /* Class = "NSTextFieldCell"; title = "Address"; ObjectID = "qcP-TU-pcN"; */
 "qcP-TU-pcN.title" = "Address";
+
+/* Class = "NSToolbarItem"; label = "Store Values"; ObjectID = "sEk-qL-hC6"; */
+"sEk-qL-hC6.label" = "Store Values";
+
+/* Class = "NSToolbarItem"; paletteLabel = "Store Values"; ObjectID = "sEk-qL-hC6"; */
+"sEk-qL-hC6.paletteLabel" = "Store Values";
+
+/* Class = "NSSearchToolbarItem"; label = "Search"; ObjectID = "tHJ-Bh-ZVW"; */
+"tHJ-Bh-ZVW.label" = "Search";
+
+/* Class = "NSSearchToolbarItem"; paletteLabel = "Search"; ObjectID = "tHJ-Bh-ZVW"; */
+"tHJ-Bh-ZVW.paletteLabel" = "Search";
 
 /* Class = "NSTableColumn"; headerCell.title = "Active"; ObjectID = "trw-dN-JKj"; */
 "trw-dN-JKj.headerCell.title" = "Active";
 
 /* Class = "NSMenuItem"; title = "16-bit String"; ObjectID = "vKC-PR-XXm"; */
 "vKC-PR-XXm.title" = "16-bit String";
-
-/* Class = "NSToolbarItem"; label = "Search"; ObjectID = "xlb-JZ-GJa"; */
-"xlb-JZ-GJa.label" = "Search";
-
-/* Class = "NSToolbarItem"; paletteLabel = "Search"; ObjectID = "xlb-JZ-GJa"; */
-"xlb-JZ-GJa.paletteLabel" = "Search";
 
 /* Class = "NSMenuItem"; title = "Float"; ObjectID = "xya-wF-ZfW"; */
 "xya-wF-ZfW.title" = "Float";
