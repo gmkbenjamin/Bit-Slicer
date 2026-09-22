@@ -75,6 +75,7 @@
 	[self setSearchValue:NULL];
 	[self setSavedData:NULL];
 	[self setAdditiveConstant:NULL];
+	[self setMultiplicativeConstant:NULL];
 }
 
 - (void)setSearchValue:(void *)searchValue
