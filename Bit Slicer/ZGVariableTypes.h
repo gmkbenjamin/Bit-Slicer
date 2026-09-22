@@ -45,7 +45,9 @@ typedef enum : NSInteger
 	ZGString16,
 	ZGPointer,
     ZGByteArray,
-	ZGScript
+	ZGScript,
+	// Only used for searching; found variables have one of the number types instead
+	ZGAllNumbers
 } ZGVariableType;
 
 typedef enum : NSInteger

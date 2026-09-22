@@ -63,6 +63,7 @@ ZGMemorySize ZGDataSizeFromNumericalDataType(ZGProcessType processType, ZGVariab
 		case ZGString16:
 		case ZGByteArray:
 		case ZGScript:
+		case ZGAllNumbers:
 			dataSize = 0;
 			break;
 	}
@@ -89,4 +90,9 @@ ZGMemorySize ZGDataAlignment(ZGProcessType processType, ZGVariableType dataType,
 	}
 	
 	return dataAlignment;
+}
+
+NSArray<NSNumber *> *ZGAllNumbersDataTypes(void)
+{
+	return @[@(ZGInt8), @(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)];
 }

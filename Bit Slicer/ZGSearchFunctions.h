@@ -51,6 +51,22 @@ extern "C"
 #endif
 ZGSearchResults *ZGNarrowSearchForData(ZGMemoryMap processTask, BOOL translated, ZGSearchData *searchData, id <ZGSearchProgressDelegate> _Nullable delegate, ZGVariableType dataType, ZGVariableQualifier integerQualifier, ZGFunctionType functionType, ZGSearchResults *firstSearchResults, ZGSearchResults * _Nullable laterSearchResults);
 
+// Searches for values of several data types in one pass over memory, using the search data at the same index for each data type
+// The search data must search the same memory and only differ in how they compare values of their data type
+// Returns search results for each data type that can be searched with functionType
+#ifdef __cplusplus
+extern "C"
+#endif
+NSArray<ZGSearchResults *> *ZGSearchForDataOfTypes(ZGMemoryMap processTask, NSArray<ZGSearchData *> *searchDataArray, id <ZGSearchProgressDelegate> _Nullable delegate, NSArray<NSNumber *> *dataTypes, ZGVariableQualifier integerQualifier, ZGFunctionType functionType);
+
+// Narrows down search results of several data types together, using the search data at the same index for each data type
+// The first and later search results can span multiple data types
+// Returns search results for each data type that can be searched with functionType
+#ifdef __cplusplus
+extern "C"
+#endif
+NSArray<ZGSearchResults *> *ZGNarrowSearchForDataOfTypes(ZGMemoryMap processTask, BOOL translated, NSArray<ZGSearchData *> *searchDataArray, id <ZGSearchProgressDelegate> _Nullable delegate, NSArray<NSNumber *> *dataTypes, ZGVariableQualifier integerQualifier, ZGFunctionType functionType, ZGSearchResults *firstSearchResults, ZGSearchResults * _Nullable laterSearchResults);
+
 #ifdef __cplusplus
 extern "C"
 #endif

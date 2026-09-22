@@ -154,6 +154,9 @@
 /* Error Message for when trying address type search for 32-bit targets */
 "addressTypeNotSupportedFor32Bit" = "Searching memory addresses for 32-bit targets is not supported.";
 
+/* Error Message for when trying address type search for all numbers */
+"addressTypeNotSupportedForAllNumbers" = "Searching memory addresses is not supported for All Numbers. Choose the data type of the value being pointed to instead.";
+
 /* Error Message for when the offset value cannot be parsed */
 "addressTypeIndirectOffsetParseError" = "The offset value could not be parsed.";
 

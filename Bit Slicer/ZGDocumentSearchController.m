@@ -151,15 +151,18 @@
 - (BOOL)isVariableNarrowable:(ZGVariable *)variable dataType:(ZGVariableType)dataType pointerAddressSearch:(BOOL)pointerAddressSearch processType:(ZGProcessType)processType
 {
 	// Quick check for not allowing narrow indirect value searches for legacy 32-bit processes
-	// Address searches for 32-bit processes are already disallowed in retrieveSearchDataWithDataType
+	// Address searches for 32-bit processes are already disallowed in retrieveSearchData:dataType:addressSearch:error:
 	if (!ZG_PROCESS_TYPE_IS_64_BIT(processType) && !pointerAddressSearch && variable.usesDynamicPointerAddress)
 	{
 		return NO;
 	}
 	
+	// Searching all numbers only narrows down variables of number types that don't have dynamic pointer addresses
+	BOOL matchesDataType = (dataType == ZGAllNumbers) ? (!variable.usesDynamicPointerAddress && [ZGAllNumbersDataTypes() containsObject:@(variable.type)]) : (variable.type == dataType);
+	
 	// If we are doing a pointer address search, the variable must have a dynamic pointer address
 	// If we are doing a regular value search, variable could be a normal address or dynamic pointer address (as long as it's a 64-bit process)
-	return (variable.enabled && variable.type == dataType && !variable.isFrozen) && (!pointerAddressSearch || variable.usesDynamicPointerAddress) && !variable.usesDynamicSymbolAddress && !variable.usesDynamicLabelAddress && variable.label.length == 0;
+	return (variable.enabled && matchesDataType && !variable.isFrozen) && (!pointerAddressSearch || variable.usesDynamicPointerAddress) && !variable.usesDynamicSymbolAddress && !variable.usesDynamicLabelAddress && variable.label.length == 0;
 }
 
 - (BOOL)canStartTask
@@ -384,12 +387,13 @@
 	CFByteOrder byteOrder = _documentData.byteOrderTag;
 	ZGProcess *currentProcess = windowController.currentProcess;
 	ZGMemorySize pointerSize = currentProcess.pointerSize;
+	ZGProcessType processType = currentProcess.type;
 	
 	ZGMemorySize dataSize = _searchData.dataSize;
 	
 	ZGMemorySize searchResultsCount = searchResults.count;
 	
-	[searchResults enumerateWithCount:numberOfVariables removeResults:YES usingBlock:^(const void *data, BOOL * __unused stop) {
+	[searchResults enumerateWithCount:numberOfVariables removeResults:YES usingDataTypeBlock:^(const void *data, ZGVariableType dataType, BOOL * __unused stop) {
 		switch (resultType)
 		{
 			case ZGSearchResultTypeDirect:
@@ -409,12 +413,15 @@
 				
 				BOOL enabled = (!finishingSearch || searchResultsCount > 1);
 				
+				// Results may be of different number types when searching all numbers, so their sizes come from their types
+				ZGMemorySize variableSize = ZGIsNumericalDataType(dataType) ? ZGDataSizeFromNumericalDataType(processType, dataType) : dataSize;
+				
 				ZGVariable *newVariable =
 				[[ZGVariable alloc]
 				 initWithValue:NULL
-				 size:dataSize
+				 size:variableSize
 				 address:variableAddress
-				 type:searchResults.dataType
+				 type:dataType
 				 qualifier:qualifier
 				 pointerSize:pointerSize
 				 description:[[NSAttributedString alloc] initWithString:@""]
@@ -488,7 +495,7 @@
 				 initWithValue:NULL
 				 size:dataSize
 				 address:finalBaseAddress
-				 type:searchResults.dataType
+				 type:dataType
 				 qualifier:qualifier
 				 pointerSize:pointerSize
 				 description:[[NSAttributedString alloc] initWithString:@""]
@@ -574,7 +581,7 @@
 #define ZGRetrieveFlagsErrorDomain @"ZGRetrieveFlagsErrorDomain"
 #define ZGRetrieveFlagsErrorDescriptionKey @"ZGRetrieveFlagsErrorDescriptionKey"
 
-- (BOOL)retrieveFlagsSearchDataWithDataType:(ZGVariableType)dataType functionType:(ZGFunctionType)functionType error:(NSError * __autoreleasing *)error
+- (BOOL)retrieveFlagsSearchData:(ZGSearchData *)searchData dataType:(ZGVariableType)dataType functionType:(ZGFunctionType)functionType error:(NSError * __autoreleasing *)error
 {
 	ZGDocumentWindowController *windowController = _windowController;
 	
@@ -605,8 +612,8 @@
 			{
 				// Clearly a range type of search
 				ZGMemorySize rangeDataSize;
-				_searchData.rangeValue = ZGValueFromString(currentProcess.type, flagsExpression, dataType, &rangeDataSize);
-				if (_searchData.rangeValue == NULL)
+				searchData.rangeValue = ZGValueFromString(currentProcess.type, flagsExpression, dataType, &rangeDataSize);
+				if (searchData.rangeValue == NULL)
 				{
 					NSLog(@"Failed to parse range value from %@...", flagsExpression);
 					return NO;
@@ -614,7 +621,7 @@
 			}
 			else
 			{
-				_searchData.rangeValue = NULL;
+				searchData.rangeValue = NULL;
 			}
 			
 			if (ZGIsFunctionTypeGreaterThan(functionType))
@@ -635,13 +642,13 @@
 				void *epsilon = ZGValueFromString(currentProcess.type, flagsExpression, ZGDouble, &epsilonDataSize);
 				if (epsilon != NULL)
 				{
-					_searchData.epsilon = *((double *)epsilon);
+					searchData.epsilon = *((double *)epsilon);
 					free(epsilon);
 				}
 			}
 			else
 			{
-				_searchData.epsilon = DEFAULT_FLOATING_POINT_EPSILON;
+				searchData.epsilon = DEFAULT_FLOATING_POINT_EPSILON;
 			}
 			
 			_documentData.lastEpsilonValue = flagsStringValue;
@@ -685,26 +692,26 @@
 	return success;
 }
 
-- (BOOL)retrieveSearchDataWithDataType:(ZGVariableType)directDataType addressSearch:(BOOL)addressSearch error:(NSError * __autoreleasing *)error
+- (BOOL)retrieveSearchData:(ZGSearchData *)searchData dataType:(ZGVariableType)directDataType addressSearch:(BOOL)addressSearch error:(NSError * __autoreleasing *)error
 {
 	ZGVariableType dataType = addressSearch ? ZGPointer : directDataType;
 	
 	ZGDocumentWindowController *windowController = _windowController;
 	
 	ZGProcess *process = windowController.currentProcess;
-	_searchData.pointerSize = process.pointerSize;
+	searchData.pointerSize = process.pointerSize;
 	
 	// Set default search arguments
-	_searchData.epsilon = DEFAULT_FLOATING_POINT_EPSILON;
-	_searchData.rangeValue = NULL;
+	searchData.epsilon = DEFAULT_FLOATING_POINT_EPSILON;
+	searchData.rangeValue = NULL;
 	
 	ZGFunctionType functionType = _functionType;
 	
 	ZGProcessType processType = windowController.currentProcess.type;
 	
-	_searchData.shouldCompareStoredValues = ZGIsFunctionTypeStore(functionType);
+	searchData.shouldCompareStoredValues = ZGIsFunctionTypeStore(functionType);
 	
-	if (!_searchData.shouldCompareStoredValues)
+	if (!searchData.shouldCompareStoredValues)
 	{
 		NSString *searchValueInput = _searchValueString;
 		NSString *finalSearchExpression = ZGIsNumericalDataType(dataType) ? [ZGCalculator evaluateExpression:searchValueInput] : searchValueInput;
@@ -722,7 +729,7 @@
 		void *searchValue = ZGValueFromString(processType, finalSearchExpression, dataType, &dataSize);
 		if (searchValue != NULL)
 		{
-			_searchData.searchValue = searchValue;
+			searchData.searchValue = searchValue;
 		}
 		else
 		{
@@ -734,7 +741,7 @@
 			return NO;
 		}
 		
-		if (_searchData.shouldIncludeNullTerminator)
+		if (searchData.shouldIncludeNullTerminator)
 		{
 			if (dataType == ZGString16)
 			{
@@ -746,12 +753,12 @@
 			}
 		}
 		
-		_searchData.dataSize = dataSize;
+		searchData.dataSize = dataSize;
 		
 		if (dataType == ZGByteArray)
 		{
 			// If this returns NULL, then there just were no wildcards
-			_searchData.byteArrayFlags = ZGCreateFlagsForByteArrayWildcards(finalSearchExpression);
+			searchData.byteArrayFlags = ZGCreateFlagsForByteArrayWildcards(finalSearchExpression);
 		}
 	}
 	else
@@ -765,8 +772,8 @@
 			return NO;
 		}
 		
-		_searchData.searchValue = NULL;
-		_searchData.dataSize = ZGDataSizeFromNumericalDataType(processType, dataType);
+		searchData.searchValue = NULL;
+		searchData.dataSize = ZGDataSizeFromNumericalDataType(processType, dataType);
 		
 		if (ZGIsFunctionTypeLinear(functionType))
 		{
@@ -783,10 +790,10 @@
 				return NO;
 			}
 			
-			_searchData.additiveConstant = ZGValueFromString(processType, additiveConstantString, dataType, NULL);
-			_searchData.multiplicativeConstant = ZGValueFromString(processType, multiplicativeConstantString, dataType, NULL);
+			searchData.additiveConstant = ZGValueFromString(processType, additiveConstantString, dataType, NULL);
+			searchData.multiplicativeConstant = ZGValueFromString(processType, multiplicativeConstantString, dataType, NULL);
 			
-			if (_searchData.additiveConstant == NULL || _searchData.multiplicativeConstant == NULL)
+			if (searchData.additiveConstant == NULL || searchData.multiplicativeConstant == NULL)
 			{
 				if (error != NULL)
 				{
@@ -799,15 +806,15 @@
 	
 	if (!addressSearch && CFByteOrderGetCurrent() != _documentData.byteOrderTag && ZGSupportsEndianness(dataType))
 	{
-		_searchData.bytesSwapped = YES;
+		searchData.bytesSwapped = YES;
 		if (ZGSupportsSwappingBeforeSearch(functionType, dataType))
 		{
-			void *searchValue = _searchData.searchValue;
+			void *searchValue = searchData.searchValue;
 			assert(searchValue != NULL);
-			void *swappedValue = ZGSwappedValue(processType, searchValue, dataType, _searchData.dataSize);
+			void *swappedValue = ZGSwappedValue(processType, searchValue, dataType, searchData.dataSize);
 			if (swappedValue != NULL)
 			{
-				_searchData.swappedValue = swappedValue;
+				searchData.swappedValue = swappedValue;
 			}
 			else
 			{
@@ -822,16 +829,16 @@
 	}
 	else
 	{
-		_searchData.bytesSwapped = NO;
-		_searchData.swappedValue = NULL;
+		searchData.bytesSwapped = NO;
+		searchData.swappedValue = NULL;
 	}
 	
-	_searchData.dataAlignment =
+	searchData.dataAlignment =
 		_documentData.ignoreDataAlignment
 		? sizeof(int8_t)
-		: ZGDataAlignment(processType, dataType, _searchData.dataSize);
+		: ZGDataAlignment(processType, dataType, searchData.dataSize);
 	
-	if (!addressSearch && ![self retrieveFlagsSearchDataWithDataType:dataType functionType:functionType error:error])
+	if (!addressSearch && ![self retrieveFlagsSearchData:searchData dataType:dataType functionType:functionType error:error])
 	{
 		return NO;
 	}
@@ -847,7 +854,7 @@
 	
 	if (!retrievedBoundaryAddress) return NO;
 	
-	_searchData.beginAddress = beginningAddress;
+	searchData.beginAddress = beginningAddress;
 	
 	ZGMemoryAddress endingAddress = MAX_MEMORY_ADDRESS;
 	
@@ -860,9 +867,9 @@
 	
 	if (!retrievedBoundaryAddress) return NO;
 	
-	_searchData.endAddress = endingAddress;
+	searchData.endAddress = endingAddress;
 	
-	if (_searchData.beginAddress >= _searchData.endAddress)
+	if (searchData.beginAddress >= searchData.endAddress)
 	{
 		if (error != NULL)
 		{
@@ -873,11 +880,11 @@
 	
 	if (_documentData.searchType == ZGSearchTypeValue)
 	{
-		_searchData.protectionMode = _documentData.valueProtectionMode;
+		searchData.protectionMode = _documentData.valueProtectionMode;
 	}
 	else
 	{
-		_searchData.protectionMode = _documentData.addressProtectionMode;
+		searchData.protectionMode = _documentData.addressProtectionMode;
 	}
 	
 	if (!ZG_PROCESS_TYPE_IS_64_BIT(process.type))
@@ -897,42 +904,42 @@
 	switch (_documentData.searchAddressOffsetComparison)
 	{
 		case ZGSearchAddressOffsetComparisonMax:
-			_searchData.indirectAbsoluteOffset = NO;
+			searchData.indirectAbsoluteOffset = NO;
 			
-			_searchData.indirectOffsetMaxComparison = YES;
+			searchData.indirectOffsetMaxComparison = YES;
 			indirectOffsetStringValue = _documentData.searchAddressMaxOffset;
 			break;
 		case ZGSearchAddressOffsetComparisonAbsoluteMax:
-			_searchData.indirectAbsoluteOffset = YES;
-			_searchData.indirectOffsetMaxComparison = YES;
+			searchData.indirectAbsoluteOffset = YES;
+			searchData.indirectOffsetMaxComparison = YES;
 			indirectOffsetStringValue = _documentData.searchAddressMaxOffset;
 			break;
 		case ZGSearchAddressOffsetComparisonSame:
-			_searchData.indirectAbsoluteOffset = NO;
-			_searchData.indirectOffsetMaxComparison = NO;
+			searchData.indirectAbsoluteOffset = NO;
+			searchData.indirectOffsetMaxComparison = NO;
 			indirectOffsetStringValue = _documentData.searchAddressSameOffset;
 			break;
 	}
 	
 	NSString *indirectOffsetEvaluatedStringValue = [ZGCalculator evaluateExpression:indirectOffsetStringValue];
-	_searchData.indirectOffset = (int32_t)indirectOffsetEvaluatedStringValue.intValue;
+	searchData.indirectOffset = (int32_t)indirectOffsetEvaluatedStringValue.intValue;
 	
-	_searchData.indirectMaxLevels = (uint16_t)_documentData.searchAddressMaxLevels;
+	searchData.indirectMaxLevels = (uint16_t)_documentData.searchAddressMaxLevels;
 	
 	if (addressSearch)
 	{
-		_searchData.filterHeapAndStackData = _documentData.indirectFilterHeapAndStackData;
-		_searchData.excludeStaticDataFromSystemLibraries = _documentData.indirectExcludeStaticDataFromSystemLibraries;
+		searchData.filterHeapAndStackData = _documentData.indirectFilterHeapAndStackData;
+		searchData.excludeStaticDataFromSystemLibraries = _documentData.indirectExcludeStaticDataFromSystemLibraries;
 	}
 	else
 	{
-		_searchData.filterHeapAndStackData = NO;
-		_searchData.excludeStaticDataFromSystemLibraries = NO;
+		searchData.filterHeapAndStackData = NO;
+		searchData.excludeStaticDataFromSystemLibraries = NO;
 	}
 	
-	_searchData.headerAddresses = nil;
-	_searchData.totalStaticSegmentRanges = nil;
-	_searchData.filePaths = nil;
+	searchData.headerAddresses = nil;
+	searchData.totalStaticSegmentRanges = nil;
+	searchData.filePaths = nil;
 	
 	return YES;
 }
@@ -991,6 +998,71 @@
 	_searchResults.totalStaticSegmentRanges = nil;
 }
 
+// Search data for searching another data type alongside our own search data
+- (ZGSearchData *)searchDataSharingSettings
+{
+	ZGSearchData *searchData = [[ZGSearchData alloc] init];
+	searchData.includeSharedMemory = _searchData.includeSharedMemory;
+	searchData.savedData = _searchData.savedData;
+	return searchData;
+}
+
+// Retrieves search data for each number data type that can hold the numbers being searched for
+- (BOOL)retrieveAllNumbersSearchData:(NSMutableArray<ZGSearchData *> *)searchDataArray dataTypes:(NSMutableArray<NSNumber *> *)dataTypes error:(NSError * __autoreleasing *)error
+{
+	NSArray<NSNumber *> *allNumbersDataTypes = ZGAllNumbersDataTypes();
+	NSMutableArray<ZGSearchData *> *allNumbersSearchDataArray = [NSMutableArray array];
+	for (NSNumber *numberDataType in allNumbersDataTypes)
+	{
+		// Our own search data is used for the first data type, so it stays up to date like it does after any other search
+		ZGSearchData *numberSearchData = (allNumbersSearchDataArray.count == 0) ? _searchData : [self searchDataSharingSettings];
+		if (![self retrieveSearchData:numberSearchData dataType:(ZGVariableType)numberDataType.integerValue addressSearch:NO error:error])
+		{
+			return NO;
+		}
+		
+		[allNumbersSearchDataArray addObject:numberSearchData];
+	}
+	
+	// Integer data types can't hold some numbers, like 1000 for 8-bit integers or 0.5 for any of them,
+	// and would search for other numbers instead, so leave out data types whose values differ from the double values
+	ZGSearchData *doubleSearchData = allNumbersSearchDataArray[[allNumbersDataTypes indexOfObject:@(ZGDouble)]];
+	ZGVariableQualifier qualifier = (ZGVariableQualifier)_documentData.qualifierTag;
+	
+	NSUInteger dataTypeIndex = 0;
+	for (NSNumber *numberDataType in allNumbersDataTypes)
+	{
+		ZGVariableType numberType = (ZGVariableType)numberDataType.integerValue;
+		ZGSearchData *numberSearchData = allNumbersSearchDataArray[dataTypeIndex];
+		
+		if (ZGNumberValueEqualsDoubleValue(numberSearchData.searchValue, numberType, qualifier, doubleSearchData.searchValue) &&
+			ZGNumberValueEqualsDoubleValue(numberSearchData.rangeValue, numberType, qualifier, doubleSearchData.rangeValue) &&
+			ZGNumberValueEqualsDoubleValue(numberSearchData.additiveConstant, numberType, qualifier, doubleSearchData.additiveConstant) &&
+			ZGNumberValueEqualsDoubleValue(numberSearchData.multiplicativeConstant, numberType, qualifier, doubleSearchData.multiplicativeConstant))
+		{
+			[dataTypes addObject:numberDataType];
+			[searchDataArray addObject:numberSearchData];
+		}
+		
+		dataTypeIndex++;
+	}
+	
+	return YES;
+}
+
+static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress address, ZGMemorySize pointerSize)
+{
+	if (pointerSize == sizeof(ZGMemoryAddress))
+	{
+		[resultSet appendBytes:&address length:sizeof(address)];
+	}
+	else
+	{
+		ZG32BitMemoryAddress halfAddress = (ZG32BitMemoryAddress)address;
+		[resultSet appendBytes:&halfAddress length:sizeof(halfAddress)];
+	}
+}
+
 - (void)searchVariablesWithString:(NSString *)searchStringValue dataType:(ZGVariableType)dataType pointerAddressSearch:(BOOL)pointerAddressSearch functionType:(ZGFunctionType)functionType storeValuesAfterSearch:(BOOL)storeValuesAfterSearch
 {
 	_dataType = dataType;
@@ -999,8 +1071,28 @@
 	
 	ZGProcessType processType = _windowController.currentProcess.type;
 	
+	// Searching all numbers searches each number data type with its own search data
+	BOOL searchingAllNumbers = (dataType == ZGAllNumbers);
+	NSMutableArray<NSNumber *> *allNumbersDataTypes = [NSMutableArray array];
+	NSMutableArray<ZGSearchData *> *allNumbersSearchDataArray = [NSMutableArray array];
+	
 	NSError *error = nil;
-	if (![self retrieveSearchDataWithDataType:dataType addressSearch:pointerAddressSearch error:&error])
+	BOOL retrievedSearchData;
+	if (!searchingAllNumbers)
+	{
+		retrievedSearchData = [self retrieveSearchData:_searchData dataType:dataType addressSearch:pointerAddressSearch error:&error];
+	}
+	else if (pointerAddressSearch)
+	{
+		error = [NSError errorWithDomain:ZGRetrieveFlagsErrorDomain code:0 userInfo:@{ZGRetrieveFlagsErrorDescriptionKey : ZGLocalizableSearchDocumentString(@"addressTypeNotSupportedForAllNumbers")}];
+		retrievedSearchData = NO;
+	}
+	else
+	{
+		retrievedSearchData = [self retrieveAllNumbersSearchData:allNumbersSearchDataArray dataTypes:allNumbersDataTypes error:&error];
+	}
+	
+	if (!retrievedSearchData)
 	{
 		ZGRunAlertPanelWithOKButton(ZGLocalizableSearchDocumentString(@"invalidSearchInputAlertTitle"), ZGUnwrapNullableObject(error.userInfo[ZGRetrieveFlagsErrorDescriptionKey]));
 		return;
@@ -1018,10 +1110,11 @@
 	// Compute indirectMaxLevelsForCurrentSearchResults (if relevant)
 	uint16_t indirectMaxLevelsForCurrentSearchResults;
 	
-	if (!isNarrowingSearch)
+	if (!isNarrowingSearch || searchingAllNumbers)
 	{
 		// Regular initial value search with indirect variable searching is not possible
 		// For initial address search, indirectMaxLevelsForCurrentSearchResults is not used
+		// Searching all numbers does not narrow down indirect variables
 		indirectMaxLevelsForCurrentSearchResults = 0;
 	}
 	else /* if (isNarrowingSearch) */
@@ -1149,7 +1242,39 @@
 	BOOL narrowingUnalignedAddressAccess = NO;
 	NSMutableArray<NSString *> *narrowIndirectAddressFormulas = (indirectMaxLevelsForCurrentSearchResults == 0) ? nil : [NSMutableArray array];
 	BOOL narrowIndirectUsesPreviousSearchResults = NO;
-	if (isNarrowingSearch)
+	if (isNarrowingSearch && searchingAllNumbers)
+	{
+		// Each number data type is narrowed down separately
+		ZGMemorySize pointerSize = _searchData.pointerSize;
+		
+		NSMutableArray<ZGSearchResults *> *firstDataTypeSearchResults = [NSMutableArray array];
+		for (NSUInteger dataTypeIndex = 0; dataTypeIndex < allNumbersDataTypes.count; dataTypeIndex++)
+		{
+			ZGVariableType numberDataType = (ZGVariableType)allNumbersDataTypes[dataTypeIndex].integerValue;
+			ZGMemorySize hostAlignment = ZGDataAlignment(ZG_PROCESS_TYPE_HOST, numberDataType, allNumbersSearchDataArray[dataTypeIndex].dataSize);
+			
+			NSMutableData *firstResultSets = [NSMutableData data];
+			BOOL unalignedAddressAccess = NO;
+			for (ZGVariable *variable in searchedVariables)
+			{
+				if (variable.type == numberDataType)
+				{
+					ZGMemoryAddress variableAddress = variable.address;
+					ZGAppendAddressToResultSet(firstResultSets, variableAddress, pointerSize);
+					
+					if (variableAddress % hostAlignment != 0)
+					{
+						unalignedAddressAccess = YES;
+					}
+				}
+			}
+			
+			[firstDataTypeSearchResults addObject:[[ZGSearchResults alloc] initWithResultSets:@[firstResultSets] resultType:ZGSearchResultTypeDirect dataType:numberDataType stride:pointerSize unalignedAccess:unalignedAddressAccess]];
+		}
+		
+		firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:firstDataTypeSearchResults dataType:ZGAllNumbers];
+	}
+	else if (isNarrowingSearch)
 	{
 		ZGMemorySize hostAlignment = ZGDataAlignment(ZG_PROCESS_TYPE_HOST, dataType, _searchData.dataSize);
 		
@@ -1162,15 +1287,7 @@
 			
 			if (indirectMaxLevelsForCurrentSearchResults == 0)
 			{
-				if (pointerSize == sizeof(ZGMemoryAddress))
-				{
-					[firstResultSets appendBytes:&variableAddress length:sizeof(variableAddress)];
-				}
-				else
-				{
-					ZG32BitMemoryAddress halfVariableAddress = (ZG32BitMemoryAddress)variableAddress;
-					[firstResultSets appendBytes:&halfVariableAddress length:sizeof(halfVariableAddress)];
-				}
+				ZGAppendAddressToResultSet(firstResultSets, variableAddress, pointerSize);
 			}
 			else
 			{
@@ -1310,13 +1427,37 @@
 		}
 		else if (!isNarrowingSearch)
 		{
-			// Regular initial value search
-			self->_temporarySearchResults = ZGSearchForData(currentProcess.processTask, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
+			if (!searchingAllNumbers)
+			{
+				// Regular initial value search
+				self->_temporarySearchResults = ZGSearchForData(currentProcess.processTask, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
+			}
+			else
+			{
+				// Initial value search for all numbers
+				NSArray<ZGSearchResults *> *numberSearchResults = ZGSearchForDataOfTypes(currentProcess.processTask, allNumbersSearchDataArray, self, allNumbersDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
+				
+				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:ZGAllNumbers];
+			}
 		}
 		else
 		{
-			// Regular Narrow value search
-			self->_temporarySearchResults = ZGNarrowSearchForData(currentProcess.processTask, currentProcess.translated, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, (previousSearchResults.dataType == dataType && currentProcess.pointerSize == previousSearchResults.stride) ? previousSearchResults : nil);
+			// Previous search results can be continued from if they are regular results,
+			// but only their results of the data types being searched
+			ZGSearchResults *laterSearchResults = (currentProcess.pointerSize == previousSearchResults.stride) ? previousSearchResults : nil;
+			
+			if (!searchingAllNumbers)
+			{
+				// Regular Narrow value search
+				self->_temporarySearchResults = ZGNarrowSearchForData(currentProcess.processTask, currentProcess.translated, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, [laterSearchResults searchResultsWithDataType:dataType]);
+			}
+			else
+			{
+				// Narrow value search for all numbers
+				NSArray<ZGSearchResults *> *numberSearchResults = ZGNarrowSearchForDataOfTypes(currentProcess.processTask, currentProcess.translated, allNumbersSearchDataArray, self, allNumbersDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, laterSearchResults);
+				
+				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:ZGAllNumbers];
+			}
 		}
 		
 		dispatch_async(dispatch_get_main_queue(), ^{

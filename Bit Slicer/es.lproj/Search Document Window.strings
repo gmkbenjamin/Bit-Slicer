@@ -152,6 +152,9 @@
 /* Class = "NSMenu"; title = "OtherViews"; ObjectID = "a2r-06-14a"; */
 "a2r-06-14a.title" = "OtherViews";
 
+/* Class = "NSMenuItem"; title = "All Numbers"; ObjectID = "aNm-Rs-7Lk"; */
+"aNm-Rs-7Lk.title" = "Todos los números";
+
 /* Class = "NSTableColumn"; headerCell.title = "Value"; ObjectID = "aom-rv-8rE"; */
 "aom-rv-8rE.headerCell.title" = "Valor";
 

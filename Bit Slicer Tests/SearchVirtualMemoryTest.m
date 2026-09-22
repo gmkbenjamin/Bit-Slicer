@@ -38,8 +38,44 @@
 #import "ZGSearchResults.h"
 #import "ZGStoredData.h"
 #import "ZGDataValueExtracting.h"
+#import "ZGVariableDataInfo.h"
+#import "ZGSearchProgress.h"
 
 @interface SearchVirtualMemoryTest : XCTestCase
+
+@end
+
+// Records the progress it is notified about
+@interface ZGTestSearchProgressDelegate : NSObject <ZGSearchProgressDelegate>
+
+@property (nonatomic, readonly) NSMutableSet<ZGSearchProgress *> *searchProgresses;
+@property (nonatomic, readonly) NSMutableSet<NSNumber *> *dataTypes;
+
+@end
+
+@implementation ZGTestSearchProgressDelegate
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil)
+	{
+		_searchProgresses = [NSMutableSet set];
+		_dataTypes = [NSMutableSet set];
+	}
+	return self;
+}
+
+- (void)progressWillBegin:(ZGSearchProgress *)searchProgress
+{
+	[_searchProgresses addObject:searchProgress];
+}
+
+- (void)progress:(ZGSearchProgress *)searchProgress advancedWithResultSets:(NSArray<NSData *> *)__unused resultSets totalResultSetLength:(NSUInteger)__unused totalResultSetLength resultType:(ZGSearchResultType)__unused resultType dataType:(ZGVariableType)dataType addressType:(ZGSearchResultAddressType)__unused addressType stride:(ZGMemorySize)__unused stride headerAddresses:(NSArray<NSNumber *> * _Nullable)__unused headerAddresses
+{
+	[_searchProgresses addObject:searchProgress];
+	[_dataTypes addObject:@(dataType)];
+}
 
 @end
 
@@ -682,6 +718,229 @@
 	
 	ZGSearchResults *notEqualResultsWildcardsNarrowed = ZGNarrowSearchForData(_processTask, NO, searchData, nil, ZGByteArray, 0, ZGNotEquals, [[ZGSearchResults alloc] initWithResultSets:@[] resultType:ZGSearchResultTypeDirect dataType:ZGByteArray stride:sizeof(ZGMemoryAddress) unalignedAccess:NO], equalResultsWildcards);
 	XCTAssertEqual(notEqualResultsWildcardsNarrowed.count, 1U);
+}
+
+- (NSArray<NSNumber *> *)addressesFromSearchResults:(ZGSearchResults *)searchResults
+{
+	NSMutableArray<NSNumber *> *addresses = [NSMutableArray array];
+	[searchResults enumerateWithCount:searchResults.count removeResults:NO usingBlock:^(const void *resultAddressData, BOOL * __unused stop) {
+		[addresses addObject:@(*(const ZGMemoryAddress *)resultAddressData)];
+	}];
+	return addresses;
+}
+
+- (void)testMultipleDataTypesSearch
+{
+	ZGMemoryAddress address = [self allocateDataIntoProcess];
+	
+	// Store the same number as several data types
+	int16_t int16Value = 1234;
+	int32_t int32Value = 1234;
+	float floatValue = 1234.0f;
+	double doubleValue = 1234.0;
+	
+	if (!ZGWriteBytes(_processTask, address + 0x10, &int16Value, sizeof(int16Value))) XCTFail(@"Failed to write int16 value");
+	if (!ZGWriteBytes(_processTask, address + 0x20, &int32Value, sizeof(int32Value))) XCTFail(@"Failed to write int32 value");
+	if (!ZGWriteBytes(_processTask, address + 0x30, &floatValue, sizeof(floatValue))) XCTFail(@"Failed to write float value");
+	if (!ZGWriteBytes(_processTask, address + 0x40, &doubleValue, sizeof(doubleValue))) XCTFail(@"Failed to write double value");
+	
+	NSArray<NSNumber *> *dataTypes = @[@(ZGInt16), @(ZGInt32), @(ZGFloat), @(ZGDouble)];
+	NSArray<NSNumber *> *valueAddresses = @[@(address + 0x10), @(address + 0x20), @(address + 0x30), @(address + 0x40)];
+	NSArray<ZGSearchData *> *searchDataArray = @[
+		[self searchDataFromBytes:&int16Value size:sizeof(int16Value) dataType:ZGInt16 address:address alignment:sizeof(int16Value)],
+		[self searchDataFromBytes:&int32Value size:sizeof(int32Value) dataType:ZGInt32 address:address alignment:sizeof(int32Value)],
+		[self searchDataFromBytes:&floatValue size:sizeof(floatValue) dataType:ZGFloat address:address alignment:sizeof(floatValue)],
+		[self searchDataFromBytes:&doubleValue size:sizeof(doubleValue) dataType:ZGDouble address:address alignment:sizeof(doubleValue)]
+	];
+	
+	ZGTestSearchProgressDelegate *progressDelegate = [[ZGTestSearchProgressDelegate alloc] init];
+	
+	NSArray<ZGSearchResults *> *searchResultsArray = ZGSearchForDataOfTypes(_processTask, searchDataArray, progressDelegate, dataTypes, ZGSigned, ZGEquals);
+	XCTAssertEqual(searchResultsArray.count, dataTypes.count);
+	
+	// Searching the data types together finds the same results as searching them separately
+	NSUInteger totalCount = 0;
+	for (NSUInteger dataTypeIndex = 0; dataTypeIndex < dataTypes.count; dataTypeIndex++)
+	{
+		ZGVariableType dataType = (ZGVariableType)dataTypes[dataTypeIndex].integerValue;
+		ZGSearchResults *searchResults = searchResultsArray[dataTypeIndex];
+		ZGSearchResults *expectedSearchResults = ZGSearchForData(_processTask, searchDataArray[dataTypeIndex], nil, dataType, ZGSigned, ZGEquals);
+		
+		NSArray<NSNumber *> *addresses = [self addressesFromSearchResults:searchResults];
+		XCTAssertEqual(searchResults.dataType, dataType);
+		XCTAssertEqualObjects(addresses, [self addressesFromSearchResults:expectedSearchResults]);
+		XCTAssertTrue([addresses containsObject:valueAddresses[dataTypeIndex]]);
+		
+		totalCount += searchResults.count;
+	}
+	
+	// The data types report their progress as one search, which is delivered on the main queue
+	NSDate *timeoutDate = [NSDate dateWithTimeIntervalSinceNow:5.0];
+	while ((progressDelegate.searchProgresses.anyObject == nil || progressDelegate.searchProgresses.anyObject.progress < progressDelegate.searchProgresses.anyObject.maxProgress) && timeoutDate.timeIntervalSinceNow > 0.0)
+	{
+		[[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+	}
+	
+	ZGSearchProgress *searchProgress = progressDelegate.searchProgresses.anyObject;
+	XCTAssertEqual(progressDelegate.searchProgresses.count, 1U);
+	XCTAssertEqual(searchProgress.progress, searchProgress.maxProgress);
+	XCTAssertEqual(searchProgress.numberOfVariablesFound, totalCount);
+	XCTAssertEqualObjects(progressDelegate.dataTypes, [NSSet setWithArray:dataTypes]);
+	
+	int32_t changedInt32Value = 5678;
+	if (!ZGWriteBytes(_processTask, address + 0x20, &changedInt32Value, sizeof(changedInt32Value))) XCTFail(@"Failed to change int32 value");
+	
+	float changedFloatValue = 5678.0f;
+	if (!ZGWriteBytes(_processTask, address + 0x30, &changedFloatValue, sizeof(changedFloatValue))) XCTFail(@"Failed to change float value");
+	
+	// First search results don't need to have every data type
+	ZGMemoryAddress int16Address = address + 0x10;
+	ZGSearchResults *firstInt16SearchResults = [[ZGSearchResults alloc] initWithResultSets:@[[NSData dataWithBytes:&int16Address length:sizeof(int16Address)]] resultType:ZGSearchResultTypeDirect dataType:ZGInt16 stride:sizeof(ZGMemoryAddress) unalignedAccess:NO];
+	ZGSearchResults *firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:@[firstInt16SearchResults] dataType:ZGAllNumbers];
+	ZGSearchResults *laterSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:searchResultsArray dataType:ZGAllNumbers];
+	
+	NSArray<ZGSearchResults *> *narrowSearchResultsArray = ZGNarrowSearchForDataOfTypes(_processTask, NO, searchDataArray, nil, dataTypes, ZGSigned, ZGEquals, firstSearchResults, laterSearchResults);
+	XCTAssertEqual(narrowSearchResultsArray.count, dataTypes.count);
+	
+	// Narrowing down the data types together also matches narrowing them down separately
+	for (NSUInteger dataTypeIndex = 0; dataTypeIndex < dataTypes.count; dataTypeIndex++)
+	{
+		ZGVariableType dataType = (ZGVariableType)dataTypes[dataTypeIndex].integerValue;
+		ZGSearchResults *narrowSearchResults = narrowSearchResultsArray[dataTypeIndex];
+		
+		ZGSearchResults *expectedFirstSearchResults = (dataType == ZGInt16) ? firstInt16SearchResults : [[ZGSearchResults alloc] initWithResultSets:@[] resultType:ZGSearchResultTypeDirect dataType:dataType stride:sizeof(ZGMemoryAddress) unalignedAccess:NO];
+		ZGSearchResults *expectedNarrowSearchResults = ZGNarrowSearchForData(_processTask, NO, searchDataArray[dataTypeIndex], nil, dataType, ZGSigned, ZGEquals, expectedFirstSearchResults, searchResultsArray[dataTypeIndex]);
+		
+		XCTAssertEqual(narrowSearchResults.dataType, dataType);
+		XCTAssertEqualObjects([self addressesFromSearchResults:narrowSearchResults], [self addressesFromSearchResults:expectedNarrowSearchResults]);
+	}
+	
+	XCTAssertTrue([[self addressesFromSearchResults:narrowSearchResultsArray[0]] containsObject:@(address + 0x10)]);
+	XCTAssertFalse([[self addressesFromSearchResults:narrowSearchResultsArray[1]] containsObject:@(address + 0x20)]);
+	XCTAssertFalse([[self addressesFromSearchResults:narrowSearchResultsArray[2]] containsObject:@(address + 0x30)]);
+	XCTAssertTrue([[self addressesFromSearchResults:narrowSearchResultsArray[3]] containsObject:@(address + 0x40)]);
+}
+
+- (ZGSearchResults *)searchResultsWithAddresses:(NSArray<NSNumber *> *)addresses dataType:(ZGVariableType)dataType
+{
+	NSMutableData *resultSet = [NSMutableData data];
+	for (NSNumber *addressNumber in addresses)
+	{
+		ZGMemoryAddress address = addressNumber.unsignedLongLongValue;
+		[resultSet appendBytes:&address length:sizeof(address)];
+	}
+	
+	return [[ZGSearchResults alloc] initWithResultSets:@[resultSet] resultType:ZGSearchResultTypeDirect dataType:dataType stride:sizeof(ZGMemoryAddress) unalignedAccess:NO];
+}
+
+- (void)testMultipleDataTypeSearchResults
+{
+	NSArray<NSNumber *> *int8Addresses = @[@0x1000, @0x1001, @0x1002, @0x1003, @0x1004, @0x1005, @0x1006, @0x1007, @0x1008, @0x1009];
+	NSArray<NSNumber *> *int32Addresses = @[@0x2000, @0x2004];
+	NSArray<NSNumber *> *floatAddresses = @[@0x3000, @0x3004, @0x3008, @0x300C];
+	
+	ZGSearchResults *searchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:@[[self searchResultsWithAddresses:int8Addresses dataType:ZGInt8], [self searchResultsWithAddresses:int32Addresses dataType:ZGInt32], [self searchResultsWithAddresses:floatAddresses dataType:ZGFloat]] dataType:ZGAllNumbers];
+	
+	XCTAssertEqual(searchResults.dataType, ZGAllNumbers);
+	XCTAssertEqual(searchResults.count, 16U);
+	XCTAssertEqual(searchResults.stride, sizeof(ZGMemoryAddress));
+	
+	XCTAssertEqualObjects([self addressesFromSearchResults:[searchResults searchResultsWithDataType:ZGInt32]], int32Addresses);
+	XCTAssertEqual([searchResults searchResultsWithDataType:ZGInt32].dataType, ZGInt32);
+	XCTAssertNil([searchResults searchResultsWithDataType:ZGDouble]);
+	
+	// Removing results from search results of a data type doesn't remove them from the combined search results
+	[[searchResults searchResultsWithDataType:ZGInt32] enumerateWithCount:2 removeResults:YES usingBlock:^(const void * __unused data, BOOL * __unused stop) {}];
+	XCTAssertEqual(searchResults.count, 16U);
+	
+	NSMutableDictionary<NSNumber *, NSMutableArray<NSNumber *> *> *enumeratedAddresses = [NSMutableDictionary dictionary];
+	zg_enumerate_search_results_with_data_type_t recordAddress = ^(const void *data, ZGVariableType dataType, BOOL * __unused stop) {
+		NSMutableArray<NSNumber *> *addresses = enumeratedAddresses[@(dataType)];
+		if (addresses == nil)
+		{
+			addresses = [NSMutableArray array];
+			enumeratedAddresses[@(dataType)] = addresses;
+		}
+		[addresses addObject:@(*(const ZGMemoryAddress *)data)];
+	};
+	
+	// Each data type gets an even share, and shares a data type has too few results for go to the others
+	[searchResults enumerateWithCount:9 removeResults:YES usingDataTypeBlock:recordAddress];
+	XCTAssertEqualObjects(enumeratedAddresses[@(ZGInt8)], [int8Addresses subarrayWithRange:NSMakeRange(0, 4)]);
+	XCTAssertEqualObjects(enumeratedAddresses[@(ZGInt32)], int32Addresses);
+	XCTAssertEqualObjects(enumeratedAddresses[@(ZGFloat)], [floatAddresses subarrayWithRange:NSMakeRange(0, 3)]);
+	XCTAssertEqual(searchResults.count, 7U);
+	XCTAssertEqual(searchResults.resultSets.count, 2U);
+	
+	// Enumerating continues with the results that were not removed
+	[enumeratedAddresses removeAllObjects];
+	[searchResults enumerateWithCount:100 removeResults:YES usingDataTypeBlock:recordAddress];
+	XCTAssertEqualObjects(enumeratedAddresses[@(ZGInt8)], [int8Addresses subarrayWithRange:NSMakeRange(4, 6)]);
+	XCTAssertNil(enumeratedAddresses[@(ZGInt32)]);
+	XCTAssertEqualObjects(enumeratedAddresses[@(ZGFloat)], [floatAddresses subarrayWithRange:NSMakeRange(3, 1)]);
+	XCTAssertEqual(searchResults.count, 0U);
+	
+	// Search results with a single data type only have search results for their data type
+	ZGSearchResults *int8SearchResults = [self searchResultsWithAddresses:int8Addresses dataType:ZGInt8];
+	XCTAssertEqual([int8SearchResults searchResultsWithDataType:ZGInt8], int8SearchResults);
+	XCTAssertNil([int8SearchResults searchResultsWithDataType:ZGInt16]);
+}
+
+- (void)testNumberValuesEqualDoubleValues
+{
+	NSArray<NSString *> *numbers = @[@"1000", @"200", @"-5", @"3.5", @"-9000000000", @"0.1"];
+	
+	// Which data types can hold each number, when signed and unsigned
+	NSDictionary<NSString *, NSArray<NSNumber *> *> *signedDataTypes = @{
+		@"1000" : @[@(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"200" : @[@(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"-5" : @[@(ZGInt8), @(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"3.5" : @[@(ZGFloat), @(ZGDouble)],
+		@"-9000000000" : @[@(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"0.1" : @[@(ZGFloat), @(ZGDouble)],
+	};
+	
+	NSDictionary<NSString *, NSArray<NSNumber *> *> *unsignedDataTypes = @{
+		@"1000" : @[@(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"200" : @[@(ZGInt8), @(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)],
+		@"-5" : @[@(ZGFloat), @(ZGDouble)],
+		@"3.5" : @[@(ZGFloat), @(ZGDouble)],
+		@"-9000000000" : @[@(ZGFloat), @(ZGDouble)],
+		@"0.1" : @[@(ZGFloat), @(ZGDouble)],
+	};
+	
+	for (NSString *number in numbers)
+	{
+		void *doubleValue = ZGValueFromString(ZGProcessTypeARM64, number, ZGDouble, NULL);
+		
+		NSMutableArray<NSNumber *> *signedHoldingDataTypes = [NSMutableArray array];
+		NSMutableArray<NSNumber *> *unsignedHoldingDataTypes = [NSMutableArray array];
+		for (NSNumber *dataTypeNumber in ZGAllNumbersDataTypes())
+		{
+			ZGVariableType dataType = (ZGVariableType)dataTypeNumber.integerValue;
+			void *value = ZGValueFromString(ZGProcessTypeARM64, number, dataType, NULL);
+			
+			if (ZGNumberValueEqualsDoubleValue(value, dataType, ZGSigned, doubleValue))
+			{
+				[signedHoldingDataTypes addObject:dataTypeNumber];
+			}
+			
+			if (ZGNumberValueEqualsDoubleValue(value, dataType, ZGUnsigned, doubleValue))
+			{
+				[unsignedHoldingDataTypes addObject:dataTypeNumber];
+			}
+			
+			free(value);
+		}
+		
+		XCTAssertEqualObjects(signedHoldingDataTypes, signedDataTypes[number], @"%@", number);
+		XCTAssertEqualObjects(unsignedHoldingDataTypes, unsignedDataTypes[number], @"%@", number);
+		
+		free(doubleValue);
+	}
+	
+	// Search data without values, like when comparing stored values, can be searched with any data type
+	XCTAssertTrue(ZGNumberValueEqualsDoubleValue(NULL, ZGInt8, ZGSigned, NULL));
 }
 
 @end

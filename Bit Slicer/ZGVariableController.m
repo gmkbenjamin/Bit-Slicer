@@ -894,6 +894,7 @@ static NSString *ZGScriptIndentationSpacesWidthKey = @"ZGScriptIndentationSpaces
 		}
 		case ZGPointer:
 		case ZGScript:
+		case ZGAllNumbers:
 			break;
 	}
 	

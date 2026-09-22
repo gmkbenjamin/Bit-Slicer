@@ -38,3 +38,6 @@
 BOOL ZGIsNumericalDataType(ZGVariableType dataType);
 ZGMemorySize ZGDataSizeFromNumericalDataType(ZGProcessType processType, ZGVariableType dataType);
 ZGMemorySize ZGDataAlignment(ZGProcessType processType, ZGVariableType dataType, ZGMemorySize dataSize);
+
+// The data types that are searched when searching for all numbers
+NSArray<NSNumber *> *ZGAllNumbersDataTypes(void);

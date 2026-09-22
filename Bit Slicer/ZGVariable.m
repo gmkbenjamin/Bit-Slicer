@@ -289,6 +289,7 @@ NSString *ZGVariablePboardType = @"com.zgcoder.BitSlicer.variable-pboard-type";
 			break;
 		case ZGString8:
 		case ZGString16:
+		case ZGAllNumbers:
 			break;
 	}
 	
@@ -553,6 +554,7 @@ NSString *ZGVariablePboardType = @"com.zgcoder.BitSlicer.variable-pboard-type";
 				break;
 			}
 			case ZGScript:
+			case ZGAllNumbers:
 				_stringValue = @"";
 				break;
 		}

@@ -651,6 +651,7 @@
 				case ZGPointer:
 				case ZGFloat:
 				case ZGDouble:
+				case ZGAllNumbers:
 					break;
 			}
 		}
@@ -743,7 +744,7 @@
 	
 	if (_documentData.searchType == ZGSearchTypeValue)
 	{
-		if (dataType == ZGFloat || dataType == ZGDouble)
+		if (dataType == ZGFloat || dataType == ZGDouble || dataType == ZGAllNumbers)
 		{
 			if (ZGIsFunctionTypeEquals(functionType) || ZGIsFunctionTypeNotEquals(functionType))
 			{
@@ -765,6 +766,9 @@
 			}
 			
 			needsFlags = YES;
+			
+			// All numbers includes integers too
+			needsQualifier = (dataType == ZGAllNumbers);
 		}
 		else if (dataType == ZGString8 || dataType == ZGString16)
 		{
@@ -803,6 +807,7 @@
 			case ZGDouble:
 			case ZGString8:
 			case ZGString16:
+			case ZGAllNumbers:
 				needsQualifier = NO;
 				break;
 		}
@@ -1814,6 +1819,12 @@
 - (IBAction)searchPointerToSelectedVariable:(id)__unused sender
 {
 	ZGVariable *variable = [[self selectedVariables] objectAtIndex:0];
+	
+	// Searching addresses needs the data type of the value being pointed to
+	if ([self selectedDataType] == ZGAllNumbers)
+	{
+		[self selectDataTypeWithTag:variable.type recordUndo:YES];
+	}
 	
 	[_searchTypePopUpButton selectItemWithTag:ZGSearchTypeAddress];
 	[self _changeSearchType:ZGSearchTypeAddress prepopulateAddress:NO];

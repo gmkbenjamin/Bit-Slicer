@@ -40,6 +40,10 @@ NS_ASSUME_NONNULL_BEGIN
 void * _Nullable ZGValueFromString(ZGProcessType processType, NSString *stringValue, ZGVariableType dataType, ZGMemorySize * _Nullable dataSize);
 void * _Nullable ZGSwappedValue(ZGProcessType processType, const void *value, ZGVariableType dataType, ZGMemorySize dataSize);
 
+// Indicates if a number value is the same number as a double value, which is always the case for floating point values since they're compared approximately
+// This is also the case if both values are NULL
+BOOL ZGNumberValueEqualsDoubleValue(const void * _Nullable value, ZGVariableType dataType, ZGVariableQualifier qualifier, const void * _Nullable doubleValue);
+
 NSArray<NSString *> *ZGByteArrayComponentsFromString(NSString *searchString);
 unsigned char * _Nullable ZGCreateFlagsForByteArrayWildcards(NSString *searchValue);
 

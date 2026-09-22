@@ -33,6 +33,10 @@
 #import "ZGSearchResults.h"
 
 @implementation ZGSearchResults
+{
+	// Only set when search results span multiple data types
+	NSArray<ZGSearchResults *> * _Nullable _dataTypeSearchResults;
+}
 
 static ZGMemoryAddress _resultCount(NSArray<NSData *> *resultSets, ZGMemorySize stride)
 {
@@ -78,6 +82,64 @@ static ZGMemoryAddress _resultCount(NSArray<NSData *> *resultSets, ZGMemorySize 
 		_unalignedAccess = unalignedAccess;
 	}
 	return self;
+}
+
+- (instancetype)initWithDataTypeSearchResults:(NSArray<ZGSearchResults *> *)dataTypeSearchResults dataType:(ZGVariableType)dataType
+{
+	self = [super init];
+	if (self != nil)
+	{
+		ZGMemorySize stride = dataTypeSearchResults.firstObject.stride;
+		BOOL unalignedAccess = NO;
+		for (ZGSearchResults *searchResults in dataTypeSearchResults)
+		{
+			assert(searchResults.resultType == ZGSearchResultTypeDirect && searchResults.stride == stride && searchResults->_dataTypeSearchResults == nil);
+			
+			unalignedAccess = unalignedAccess || searchResults.unalignedAccess;
+		}
+		
+		_dataTypeSearchResults = [dataTypeSearchResults copy];
+		_resultType = ZGSearchResultTypeDirect;
+		_dataType = dataType;
+		_stride = stride;
+		_unalignedAccess = unalignedAccess;
+		
+		[self updateResultSetsFromDataTypeSearchResults];
+	}
+	return self;
+}
+
+- (void)updateResultSetsFromDataTypeSearchResults
+{
+	NSMutableArray<NSData *> *resultSets = [NSMutableArray array];
+	ZGMemorySize count = 0;
+	for (ZGSearchResults *searchResults in _dataTypeSearchResults)
+	{
+		[resultSets addObjectsFromArray:searchResults.resultSets];
+		count += searchResults.count;
+	}
+	
+	_resultSets = [resultSets copy];
+	_count = count;
+}
+
+- (ZGSearchResults *)searchResultsWithDataType:(ZGVariableType)dataType
+{
+	if (_dataTypeSearchResults == nil)
+	{
+		return (_dataType == dataType) ? self : nil;
+	}
+	
+	for (ZGSearchResults *searchResults in _dataTypeSearchResults)
+	{
+		if (searchResults.dataType == dataType)
+		{
+			// Return a copy so our results can only be removed through us
+			return [[ZGSearchResults alloc] initWithResultSets:searchResults.resultSets resultType:searchResults.resultType dataType:dataType stride:searchResults.stride unalignedAccess:searchResults.unalignedAccess];
+		}
+	}
+	
+	return nil;
 }
 
 static void ZGAppendAndIncreaseIndirectResultSetsStrideIfNeeded(NSMutableArray<NSData *> *newResultSets, NSArray<NSData *> *resultSets, ZGMemorySize currentStride, ZGMemorySize newStride)
@@ -169,14 +231,76 @@ static void ZGAppendAndIncreaseIndirectResultSetsStrideIfNeeded(NSMutableArray<N
 
 - (void)enumerateWithCount:(ZGMemorySize)count removeResults:(BOOL)removeResults usingBlock:(zg_enumerate_search_results_t)addressCallback
 {
+	[self enumerateWithCount:count removeResults:removeResults usingDataTypeBlock:^(const void *data, ZGVariableType __unused dataType, BOOL *stop) {
+		addressCallback(data, stop);
+	}];
+}
+
+- (void)enumerateDataTypeSearchResultsWithCount:(ZGMemorySize)count removeResults:(BOOL)removeResults usingBlock:(zg_enumerate_search_results_with_data_type_t)addressCallback
+{
+	NSArray<ZGSearchResults *> *dataTypeSearchResults = _dataTypeSearchResults;
+	NSUInteger dataTypeCount = dataTypeSearchResults.count;
+	
+	ZGMemorySize *dataTypeCounts = (ZGMemorySize *)calloc(dataTypeCount, sizeof(*dataTypeCounts));
+	assert(dataTypeCounts != NULL);
+	
+	// Split the count evenly between data types, giving any share a data type has too few results for to the others
+	ZGMemorySize remainingCount = MIN(count, _count);
+	while (remainingCount > 0)
+	{
+		ZGMemorySize numberOfDataTypesWithResultsLeft = 0;
+		for (NSUInteger dataTypeIndex = 0; dataTypeIndex < dataTypeCount; dataTypeIndex++)
+		{
+			if (dataTypeCounts[dataTypeIndex] < dataTypeSearchResults[dataTypeIndex].count)
+			{
+				numberOfDataTypesWithResultsLeft++;
+			}
+		}
+		
+		ZGMemorySize share = MAX(remainingCount / numberOfDataTypesWithResultsLeft, (ZGMemorySize)1);
+		for (NSUInteger dataTypeIndex = 0; dataTypeIndex < dataTypeCount && remainingCount > 0; dataTypeIndex++)
+		{
+			ZGMemorySize additionalCount = MIN(MIN(share, dataTypeSearchResults[dataTypeIndex].count - dataTypeCounts[dataTypeIndex]), remainingCount);
+			
+			dataTypeCounts[dataTypeIndex] += additionalCount;
+			remainingCount -= additionalCount;
+		}
+	}
+	
+	__block BOOL shouldStopEnumerating = NO;
+	for (NSUInteger dataTypeIndex = 0; dataTypeIndex < dataTypeCount && !shouldStopEnumerating; dataTypeIndex++)
+	{
+		[dataTypeSearchResults[dataTypeIndex] enumerateWithCount:dataTypeCounts[dataTypeIndex] removeResults:removeResults usingDataTypeBlock:^(const void *data, ZGVariableType dataType, BOOL *stop) {
+			addressCallback(data, dataType, stop);
+			shouldStopEnumerating = *stop;
+		}];
+	}
+	
+	free(dataTypeCounts);
+	
+	if (removeResults)
+	{
+		[self updateResultSetsFromDataTypeSearchResults];
+	}
+}
+
+- (void)enumerateWithCount:(ZGMemorySize)count removeResults:(BOOL)removeResults usingDataTypeBlock:(zg_enumerate_search_results_with_data_type_t)addressCallback
+{
 	if (count == 0)
 	{
+		return;
+	}
+	
+	if (_dataTypeSearchResults != nil)
+	{
+		[self enumerateDataTypeSearchResultsWithCount:count removeResults:removeResults usingBlock:addressCallback];
 		return;
 	}
 	
 	NSMutableArray<NSData *> *newResultSets = removeResults ? [NSMutableArray array] : nil;
 
 	ZGMemorySize stride = _stride;
+	ZGVariableType dataType = _dataType;
 	
 	NSUInteger resultsProcessed = 0;
 	
@@ -189,7 +313,7 @@ static void ZGAppendAndIncreaseIndirectResultSetsStrideIfNeeded(NSMutableArray<N
 		ZGMemoryAddress resultSetLength = resultSet.length;
 		for (ZGMemoryAddress offset = 0; offset < resultSetLength; offset += stride)
 		{
-			addressCallback((const void *)((const uint8_t *)resultBytes + offset), &shouldStopEnumerating);
+			addressCallback((const void *)((const uint8_t *)resultBytes + offset), dataType, &shouldStopEnumerating);
 			resultsProcessed++;
 			
 			if (resultsProcessed >= count || shouldStopEnumerating)

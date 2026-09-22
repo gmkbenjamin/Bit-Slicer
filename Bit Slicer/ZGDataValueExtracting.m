@@ -221,10 +221,51 @@ void *ZGSwappedValue(ZGProcessType processType, const void *value, ZGVariableTyp
 			break;
 		case ZGScript:
 		case ZGPointer:
+		case ZGAllNumbers:
 			break;
 	}
 	
 	return swappedValue;
+}
+
+BOOL ZGNumberValueEqualsDoubleValue(const void *value, ZGVariableType dataType, ZGVariableQualifier qualifier, const void *doubleValue)
+{
+	if (value == NULL || doubleValue == NULL)
+	{
+		return (value == NULL && doubleValue == NULL);
+	}
+	
+	double number;
+	switch (dataType)
+	{
+		case ZGInt8:
+			number = (qualifier == ZGSigned) ? (double)*(const int8_t *)value : (double)*(const uint8_t *)value;
+			break;
+		case ZGInt16:
+			number = (qualifier == ZGSigned) ? (double)*(const int16_t *)value : (double)*(const uint16_t *)value;
+			break;
+		case ZGInt32:
+			number = (qualifier == ZGSigned) ? (double)*(const int32_t *)value : (double)*(const uint32_t *)value;
+			break;
+		case ZGInt64:
+			number = (qualifier == ZGSigned) ? (double)*(const int64_t *)value : (double)*(const uint64_t *)value;
+			break;
+		case ZGFloat:
+		case ZGDouble:
+			return YES;
+		case ZGString8:
+		case ZGString16:
+		case ZGPointer:
+		case ZGByteArray:
+		case ZGScript:
+		case ZGAllNumbers:
+			return NO;
+	}
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-equal"
+	return number == *(const double *)doubleValue;
+#pragma clang diagnostic pop
 }
 
 NSArray<NSString *> *ZGByteArrayComponentsFromString(NSString *searchString)

@@ -713,6 +713,8 @@
                                         <menuItem isSeparatorItem="YES" id="zlJ-7G-QAP"/>
                                         <menuItem title="Float" tag="4" id="luK-87-e1C"/>
                                         <menuItem title="Double" tag="5" id="7kW-nd-EFZ"/>
+                                        <menuItem isSeparatorItem="YES" id="Qv3-bX-u8P"/>
+                                        <menuItem title="All Numbers" tag="11" id="aNm-Rs-7Lk"/>
                                         <menuItem isSeparatorItem="YES" id="C3U-cS-mf9"/>
                                         <menuItem title="8-bit String" tag="6" id="XPu-Mw-Wzt"/>
                                         <menuItem title="16-bit String" tag="7" id="vKC-PR-XXm"/>

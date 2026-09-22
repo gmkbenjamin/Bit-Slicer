@@ -60,6 +60,7 @@ typedef NS_ENUM(NSInteger, ZGSearchResultType)
 @property (nonatomic, readonly) ZGVariableType dataType;
 
 typedef void (^zg_enumerate_search_results_t)(const void *data, BOOL *stop);
+typedef void (^zg_enumerate_search_results_with_data_type_t)(const void *data, ZGVariableType dataType, BOOL *stop);
 
 + (ZGMemorySize)indirectStrideWithMaxNumberOfLevels:(ZGMemorySize)maxNumberOfLevels pointerSize:(ZGMemorySize)pointerSize;
 
@@ -67,9 +68,18 @@ typedef void (^zg_enumerate_search_results_t)(const void *data, BOOL *stop);
 
 - (instancetype)initWithResultSets:(NSArray<NSData *> *)resultSets resultType:(ZGSearchResultType)resultType dataType:(ZGVariableType)dataType stride:(ZGMemorySize)stride unalignedAccess:(BOOL)unalignedAccess;
 
+// Combines direct search results that each have a different data type into results spanning all of them
+- (instancetype)initWithDataTypeSearchResults:(NSArray<ZGSearchResults *> *)dataTypeSearchResults dataType:(ZGVariableType)dataType;
+
+// Returns the search results that have the data type, or nil if there are none
+- (nullable ZGSearchResults *)searchResultsWithDataType:(ZGVariableType)dataType;
+
 - (instancetype)indirectSearchResultsByAppendingIndirectSearchResults:(ZGSearchResults *)newSearchResults;
 
 - (void)enumerateWithCount:(ZGMemorySize)count removeResults:(BOOL)removeResults usingBlock:(zg_enumerate_search_results_t)addressCallback;
+
+// Search results spanning multiple data types enumerate an even share of results from each data type
+- (void)enumerateWithCount:(ZGMemorySize)count removeResults:(BOOL)removeResults usingDataTypeBlock:(zg_enumerate_search_results_with_data_type_t)addressCallback;
 
 - (void)updateHeaderAddresses:(NSArray<NSNumber *> *)headerAddresses totalStaticSegmentRanges:(NSArray<NSValue *> *)totalStaticSegmentRanges usingFilePaths:(NSArray<NSString *> *)filePaths;
 
