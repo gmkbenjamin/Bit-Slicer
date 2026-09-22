@@ -39,5 +39,9 @@ BOOL ZGIsNumericalDataType(ZGVariableType dataType);
 ZGMemorySize ZGDataSizeFromNumericalDataType(ZGProcessType processType, ZGVariableType dataType);
 ZGMemorySize ZGDataAlignment(ZGProcessType processType, ZGVariableType dataType, ZGMemorySize dataSize);
 
-// The data types that are searched when searching for all numbers
-NSArray<NSNumber *> *ZGAllNumbersDataTypes(void);
+// The number data types that are searched together when searching for a data type like all numbers,
+// or an empty array for data types that don't search several number data types at once
+NSArray<NSNumber *> *ZGMultipleNumberDataTypes(ZGVariableType dataType);
+
+// Indicates if searching for the data type searches several number data types at once
+BOOL ZGIsMultipleNumberDataType(ZGVariableType dataType);

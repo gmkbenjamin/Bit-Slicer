@@ -886,6 +886,61 @@
 	XCTAssertNil([int8SearchResults searchResultsWithDataType:ZGInt16]);
 }
 
+- (void)testInt32AndInt64Search
+{
+	ZGMemoryAddress address = [self allocateDataIntoProcess];
+	
+	// Store a number as a 32-bit integer followed by non-zero bytes, and as a 64-bit integer
+	int32_t int32Value = 1234;
+	uint32_t valueAfterInt32Value = UINT32_MAX;
+	int64_t int64Value = 1234;
+	
+	if (!ZGWriteBytes(_processTask, address + 0x20, &int32Value, sizeof(int32Value))) XCTFail(@"Failed to write int32 value");
+	if (!ZGWriteBytes(_processTask, address + 0x24, &valueAfterInt32Value, sizeof(valueAfterInt32Value))) XCTFail(@"Failed to write value after int32 value");
+	if (!ZGWriteBytes(_processTask, address + 0x40, &int64Value, sizeof(int64Value))) XCTFail(@"Failed to write int64 value");
+	
+	NSArray<NSNumber *> *dataTypes = ZGMultipleNumberDataTypes(ZGInt32AndInt64);
+	XCTAssertEqualObjects(dataTypes, (@[@(ZGInt32), @(ZGInt64)]));
+	XCTAssertTrue(ZGIsMultipleNumberDataType(ZGInt32AndInt64));
+	XCTAssertFalse(ZGIsMultipleNumberDataType(ZGInt64));
+	
+	NSArray<ZGSearchData *> *searchDataArray = @[
+		[self searchDataFromBytes:&int32Value size:sizeof(int32Value) dataType:ZGInt32 address:address alignment:sizeof(int32Value)],
+		[self searchDataFromBytes:&int64Value size:sizeof(int64Value) dataType:ZGInt64 address:address alignment:sizeof(int64Value)]
+	];
+	
+	NSArray<ZGSearchResults *> *searchResultsArray = ZGSearchForDataOfTypes(_processTask, searchDataArray, nil, dataTypes, ZGSigned, ZGEquals);
+	XCTAssertEqual(searchResultsArray.count, dataTypes.count);
+	
+	ZGSearchResults *searchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:searchResultsArray dataType:ZGInt32AndInt64];
+	XCTAssertEqual(searchResults.dataType, ZGInt32AndInt64);
+	
+	// The 64-bit integer's lower half is found as a 32-bit integer too, but the 32-bit integer isn't found as a 64-bit integer
+	NSArray<NSNumber *> *int32Addresses = [self addressesFromSearchResults:[searchResults searchResultsWithDataType:ZGInt32]];
+	NSArray<NSNumber *> *int64Addresses = [self addressesFromSearchResults:[searchResults searchResultsWithDataType:ZGInt64]];
+	XCTAssertTrue([int32Addresses containsObject:@(address + 0x20)]);
+	XCTAssertTrue([int32Addresses containsObject:@(address + 0x40)]);
+	XCTAssertFalse([int64Addresses containsObject:@(address + 0x20)]);
+	XCTAssertTrue([int64Addresses containsObject:@(address + 0x40)]);
+	
+	// Changing the 64-bit integer to a number that 32-bit integers can't hold narrows down both of its results
+	int64_t changedInt64Value = 5000000000;
+	if (!ZGWriteBytes(_processTask, address + 0x40, &changedInt64Value, sizeof(changedInt64Value))) XCTFail(@"Failed to change int64 value");
+	
+	ZGSearchResults *firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:@[[self searchResultsWithAddresses:@[] dataType:ZGInt32], [self searchResultsWithAddresses:@[] dataType:ZGInt64]] dataType:ZGInt32AndInt64];
+	
+	NSArray<ZGSearchResults *> *narrowSearchResultsArray = ZGNarrowSearchForDataOfTypes(_processTask, NO, searchDataArray, nil, dataTypes, ZGSigned, ZGEquals, firstSearchResults, searchResults);
+	XCTAssertEqual(narrowSearchResultsArray.count, dataTypes.count);
+	
+	NSArray<NSNumber *> *narrowInt32Addresses = [self addressesFromSearchResults:narrowSearchResultsArray[0]];
+	NSArray<NSNumber *> *narrowInt64Addresses = [self addressesFromSearchResults:narrowSearchResultsArray[1]];
+	XCTAssertEqual(narrowSearchResultsArray[0].dataType, ZGInt32);
+	XCTAssertEqual(narrowSearchResultsArray[1].dataType, ZGInt64);
+	XCTAssertTrue([narrowInt32Addresses containsObject:@(address + 0x20)]);
+	XCTAssertFalse([narrowInt32Addresses containsObject:@(address + 0x40)]);
+	XCTAssertFalse([narrowInt64Addresses containsObject:@(address + 0x40)]);
+}
+
 - (void)testNumberValuesEqualDoubleValues
 {
 	NSArray<NSString *> *numbers = @[@"1000", @"200", @"-5", @"3.5", @"-9000000000", @"0.1"];
@@ -915,7 +970,7 @@
 		
 		NSMutableArray<NSNumber *> *signedHoldingDataTypes = [NSMutableArray array];
 		NSMutableArray<NSNumber *> *unsignedHoldingDataTypes = [NSMutableArray array];
-		for (NSNumber *dataTypeNumber in ZGAllNumbersDataTypes())
+		for (NSNumber *dataTypeNumber in ZGMultipleNumberDataTypes(ZGAllNumbers))
 		{
 			ZGVariableType dataType = (ZGVariableType)dataTypeNumber.integerValue;
 			void *value = ZGValueFromString(ZGProcessTypeARM64, number, dataType, NULL);

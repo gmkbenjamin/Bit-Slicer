@@ -722,6 +722,7 @@ static BOOL searchResultsHaveUnalignedAccess(ZGSearchData *searchData, ZGVariabl
 		case ZGScript:
 		case ZGPointer:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			return NO;
 	}
 }
@@ -777,6 +778,7 @@ static BOOL searchUsesExtraStorage(ZGSearchData *searchData, ZGVariableType data
 		case ZGScript:
 		case ZGPointer:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			if (requiresCopy != nullptr)
 			{
 				*requiresCopy = NO;
@@ -1109,6 +1111,7 @@ else {\
 		case ZGByteArray: \
 		case ZGScript: \
 		case ZGAllNumbers: \
+		case ZGInt32AndInt64: \
 		break;\
 	}\
 }\
@@ -1428,6 +1431,7 @@ switch (theCase) {\
 	case ZGScript:\
 	case ZGPointer:\
 	case ZGAllNumbers:\
+	case ZGInt32AndInt64:\
 	break;\
 }
 
@@ -1639,6 +1643,7 @@ bool ZGString16FastSwappedCaseSensitiveNotEquals(ZGSearchData *__unsafe_unretain
 		case ZGPointer:\
 		case ZGByteArray:\
 		case ZGAllNumbers:\
+		case ZGInt32AndInt64:\
 		break;\
 	}\
 
@@ -2863,6 +2868,7 @@ static ZGSearchRequest *ZGSearchRequestForData(ZGSearchData *searchData, ZGVaria
 				break;
 			case ZGScript:
 			case ZGAllNumbers:
+			case ZGInt32AndInt64:
 				break;
 		}
 	}
@@ -3504,6 +3510,7 @@ else {\
 		case ZGByteArray:\
 		case ZGScript:\
 		case ZGAllNumbers:\
+		case ZGInt32AndInt64:\
 			break;\
 	}\
 }\
@@ -3642,6 +3649,7 @@ switch (theCase) {\
 	case ZGString16:\
 	case ZGScript:\
 	case ZGAllNumbers:\
+	case ZGInt32AndInt64:\
 	break;\
 }
 
@@ -3848,6 +3856,7 @@ switch (theCase) {\
 	case ZGPointer:\
 	case ZGScript:\
 	case ZGAllNumbers:\
+	case ZGInt32AndInt64:\
 	break;\
 }\
 
@@ -3961,6 +3970,7 @@ static ZGNarrowSearchRequest *ZGNarrowSearchRequestForData(ZGMemoryMap processTa
 			break;
 		case ZGScript:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			break;
 	}
 	

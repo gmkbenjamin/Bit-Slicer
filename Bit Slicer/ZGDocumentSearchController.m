@@ -157,8 +157,8 @@
 		return NO;
 	}
 	
-	// Searching all numbers only narrows down variables of number types that don't have dynamic pointer addresses
-	BOOL matchesDataType = (dataType == ZGAllNumbers) ? (!variable.usesDynamicPointerAddress && [ZGAllNumbersDataTypes() containsObject:@(variable.type)]) : (variable.type == dataType);
+	// Searching several number data types at once only narrows down variables of those types that don't have dynamic pointer addresses
+	BOOL matchesDataType = ZGIsMultipleNumberDataType(dataType) ? (!variable.usesDynamicPointerAddress && [ZGMultipleNumberDataTypes(dataType) containsObject:@(variable.type)]) : (variable.type == dataType);
 	
 	// If we are doing a pointer address search, the variable must have a dynamic pointer address
 	// If we are doing a regular value search, variable could be a normal address or dynamic pointer address (as long as it's a 64-bit process)
@@ -1007,33 +1007,48 @@
 	return searchData;
 }
 
-// Retrieves search data for each number data type that can hold the numbers being searched for
-- (BOOL)retrieveAllNumbersSearchData:(NSMutableArray<ZGSearchData *> *)searchDataArray dataTypes:(NSMutableArray<NSNumber *> *)dataTypes error:(NSError * __autoreleasing *)error
+// Retrieves search data for each number data type searched by a data type like all numbers that can hold the numbers being searched for
+- (BOOL)retrieveMultipleNumberSearchData:(NSMutableArray<ZGSearchData *> *)searchDataArray dataTypes:(NSMutableArray<NSNumber *> *)dataTypes forDataType:(ZGVariableType)multipleNumberDataType error:(NSError * __autoreleasing *)error
 {
-	NSArray<NSNumber *> *allNumbersDataTypes = ZGAllNumbersDataTypes();
-	NSMutableArray<ZGSearchData *> *allNumbersSearchDataArray = [NSMutableArray array];
-	for (NSNumber *numberDataType in allNumbersDataTypes)
+	NSArray<NSNumber *> *numberDataTypes = ZGMultipleNumberDataTypes(multipleNumberDataType);
+	NSMutableArray<ZGSearchData *> *numberSearchDataArray = [NSMutableArray array];
+	for (NSNumber *numberDataType in numberDataTypes)
 	{
 		// Our own search data is used for the first data type, so it stays up to date like it does after any other search
-		ZGSearchData *numberSearchData = (allNumbersSearchDataArray.count == 0) ? _searchData : [self searchDataSharingSettings];
+		ZGSearchData *numberSearchData = (numberSearchDataArray.count == 0) ? _searchData : [self searchDataSharingSettings];
 		if (![self retrieveSearchData:numberSearchData dataType:(ZGVariableType)numberDataType.integerValue addressSearch:NO error:error])
 		{
 			return NO;
 		}
 		
-		[allNumbersSearchDataArray addObject:numberSearchData];
+		[numberSearchDataArray addObject:numberSearchData];
 	}
 	
 	// Integer data types can't hold some numbers, like 1000 for 8-bit integers or 0.5 for any of them,
 	// and would search for other numbers instead, so leave out data types whose values differ from the double values
-	ZGSearchData *doubleSearchData = allNumbersSearchDataArray[[allNumbersDataTypes indexOfObject:@(ZGDouble)]];
+	ZGSearchData *doubleSearchData;
+	NSUInteger doubleDataTypeIndex = [numberDataTypes indexOfObject:@(ZGDouble)];
+	if (doubleDataTypeIndex != NSNotFound)
+	{
+		doubleSearchData = numberSearchDataArray[doubleDataTypeIndex];
+	}
+	else
+	{
+		// Doubles aren't searched but their values are still needed to compare with
+		doubleSearchData = [self searchDataSharingSettings];
+		if (![self retrieveSearchData:doubleSearchData dataType:ZGDouble addressSearch:NO error:error])
+		{
+			return NO;
+		}
+	}
+	
 	ZGVariableQualifier qualifier = (ZGVariableQualifier)_documentData.qualifierTag;
 	
 	NSUInteger dataTypeIndex = 0;
-	for (NSNumber *numberDataType in allNumbersDataTypes)
+	for (NSNumber *numberDataType in numberDataTypes)
 	{
 		ZGVariableType numberType = (ZGVariableType)numberDataType.integerValue;
-		ZGSearchData *numberSearchData = allNumbersSearchDataArray[dataTypeIndex];
+		ZGSearchData *numberSearchData = numberSearchDataArray[dataTypeIndex];
 		
 		if (ZGNumberValueEqualsDoubleValue(numberSearchData.searchValue, numberType, qualifier, doubleSearchData.searchValue) &&
 			ZGNumberValueEqualsDoubleValue(numberSearchData.rangeValue, numberType, qualifier, doubleSearchData.rangeValue) &&
@@ -1045,6 +1060,17 @@
 		}
 		
 		dataTypeIndex++;
+	}
+	
+	// Floating point data types are never left out, so this only happens when searching integers, like 32-bit and 64-bit integers
+	if (dataTypes.count == 0)
+	{
+		if (error != NULL)
+		{
+			*error = [NSError errorWithDomain:ZGRetrieveFlagsErrorDomain code:0 userInfo:@{ZGRetrieveFlagsErrorDescriptionKey : ZGLocalizableSearchDocumentString(@"numbersNotHeldBy32And64BitIntegersErrorMessage")}];
+		}
+		
+		return NO;
 	}
 	
 	return YES;
@@ -1071,25 +1097,26 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 	
 	ZGProcessType processType = _windowController.currentProcess.type;
 	
-	// Searching all numbers searches each number data type with its own search data
-	BOOL searchingAllNumbers = (dataType == ZGAllNumbers);
-	NSMutableArray<NSNumber *> *allNumbersDataTypes = [NSMutableArray array];
-	NSMutableArray<ZGSearchData *> *allNumbersSearchDataArray = [NSMutableArray array];
+	// Searching several number data types at once, like all numbers, searches each of them with its own search data
+	BOOL searchingMultipleNumberDataTypes = ZGIsMultipleNumberDataType(dataType);
+	NSMutableArray<NSNumber *> *numberDataTypes = [NSMutableArray array];
+	NSMutableArray<ZGSearchData *> *numberSearchDataArray = [NSMutableArray array];
 	
 	NSError *error = nil;
 	BOOL retrievedSearchData;
-	if (!searchingAllNumbers)
+	if (!searchingMultipleNumberDataTypes)
 	{
 		retrievedSearchData = [self retrieveSearchData:_searchData dataType:dataType addressSearch:pointerAddressSearch error:&error];
 	}
 	else if (pointerAddressSearch)
 	{
-		error = [NSError errorWithDomain:ZGRetrieveFlagsErrorDomain code:0 userInfo:@{ZGRetrieveFlagsErrorDescriptionKey : ZGLocalizableSearchDocumentString(@"addressTypeNotSupportedForAllNumbers")}];
+		NSString *errorMessage = ZGLocalizableSearchDocumentString((dataType == ZGInt32AndInt64) ? @"addressTypeNotSupportedFor32And64BitIntegers" : @"addressTypeNotSupportedForAllNumbers");
+		error = [NSError errorWithDomain:ZGRetrieveFlagsErrorDomain code:0 userInfo:@{ZGRetrieveFlagsErrorDescriptionKey : errorMessage}];
 		retrievedSearchData = NO;
 	}
 	else
 	{
-		retrievedSearchData = [self retrieveAllNumbersSearchData:allNumbersSearchDataArray dataTypes:allNumbersDataTypes error:&error];
+		retrievedSearchData = [self retrieveMultipleNumberSearchData:numberSearchDataArray dataTypes:numberDataTypes forDataType:dataType error:&error];
 	}
 	
 	if (!retrievedSearchData)
@@ -1110,11 +1137,11 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 	// Compute indirectMaxLevelsForCurrentSearchResults (if relevant)
 	uint16_t indirectMaxLevelsForCurrentSearchResults;
 	
-	if (!isNarrowingSearch || searchingAllNumbers)
+	if (!isNarrowingSearch || searchingMultipleNumberDataTypes)
 	{
 		// Regular initial value search with indirect variable searching is not possible
 		// For initial address search, indirectMaxLevelsForCurrentSearchResults is not used
-		// Searching all numbers does not narrow down indirect variables
+		// Searching several number data types at once does not narrow down indirect variables
 		indirectMaxLevelsForCurrentSearchResults = 0;
 	}
 	else /* if (isNarrowingSearch) */
@@ -1242,16 +1269,16 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 	BOOL narrowingUnalignedAddressAccess = NO;
 	NSMutableArray<NSString *> *narrowIndirectAddressFormulas = (indirectMaxLevelsForCurrentSearchResults == 0) ? nil : [NSMutableArray array];
 	BOOL narrowIndirectUsesPreviousSearchResults = NO;
-	if (isNarrowingSearch && searchingAllNumbers)
+	if (isNarrowingSearch && searchingMultipleNumberDataTypes)
 	{
 		// Each number data type is narrowed down separately
 		ZGMemorySize pointerSize = _searchData.pointerSize;
 		
 		NSMutableArray<ZGSearchResults *> *firstDataTypeSearchResults = [NSMutableArray array];
-		for (NSUInteger dataTypeIndex = 0; dataTypeIndex < allNumbersDataTypes.count; dataTypeIndex++)
+		for (NSUInteger dataTypeIndex = 0; dataTypeIndex < numberDataTypes.count; dataTypeIndex++)
 		{
-			ZGVariableType numberDataType = (ZGVariableType)allNumbersDataTypes[dataTypeIndex].integerValue;
-			ZGMemorySize hostAlignment = ZGDataAlignment(ZG_PROCESS_TYPE_HOST, numberDataType, allNumbersSearchDataArray[dataTypeIndex].dataSize);
+			ZGVariableType numberDataType = (ZGVariableType)numberDataTypes[dataTypeIndex].integerValue;
+			ZGMemorySize hostAlignment = ZGDataAlignment(ZG_PROCESS_TYPE_HOST, numberDataType, numberSearchDataArray[dataTypeIndex].dataSize);
 			
 			NSMutableData *firstResultSets = [NSMutableData data];
 			BOOL unalignedAddressAccess = NO;
@@ -1272,7 +1299,7 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 			[firstDataTypeSearchResults addObject:[[ZGSearchResults alloc] initWithResultSets:@[firstResultSets] resultType:ZGSearchResultTypeDirect dataType:numberDataType stride:pointerSize unalignedAccess:unalignedAddressAccess]];
 		}
 		
-		firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:firstDataTypeSearchResults dataType:ZGAllNumbers];
+		firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:firstDataTypeSearchResults dataType:dataType];
 	}
 	else if (isNarrowingSearch)
 	{
@@ -1427,17 +1454,17 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 		}
 		else if (!isNarrowingSearch)
 		{
-			if (!searchingAllNumbers)
+			if (!searchingMultipleNumberDataTypes)
 			{
 				// Regular initial value search
 				self->_temporarySearchResults = ZGSearchForData(currentProcess.processTask, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
 			}
 			else
 			{
-				// Initial value search for all numbers
-				NSArray<ZGSearchResults *> *numberSearchResults = ZGSearchForDataOfTypes(currentProcess.processTask, allNumbersSearchDataArray, self, allNumbersDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
+				// Initial value search for several number data types at once
+				NSArray<ZGSearchResults *> *numberSearchResults = ZGSearchForDataOfTypes(currentProcess.processTask, numberSearchDataArray, self, numberDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType);
 				
-				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:ZGAllNumbers];
+				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:dataType];
 			}
 		}
 		else
@@ -1446,17 +1473,17 @@ static void ZGAppendAddressToResultSet(NSMutableData *resultSet, ZGMemoryAddress
 			// but only their results of the data types being searched
 			ZGSearchResults *laterSearchResults = (currentProcess.pointerSize == previousSearchResults.stride) ? previousSearchResults : nil;
 			
-			if (!searchingAllNumbers)
+			if (!searchingMultipleNumberDataTypes)
 			{
 				// Regular Narrow value search
 				self->_temporarySearchResults = ZGNarrowSearchForData(currentProcess.processTask, currentProcess.translated, self->_searchData, self, dataType, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, [laterSearchResults searchResultsWithDataType:dataType]);
 			}
 			else
 			{
-				// Narrow value search for all numbers
-				NSArray<ZGSearchResults *> *numberSearchResults = ZGNarrowSearchForDataOfTypes(currentProcess.processTask, currentProcess.translated, allNumbersSearchDataArray, self, allNumbersDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, laterSearchResults);
+				// Narrow value search for several number data types at once
+				NSArray<ZGSearchResults *> *numberSearchResults = ZGNarrowSearchForDataOfTypes(currentProcess.processTask, currentProcess.translated, numberSearchDataArray, self, numberDataTypes, (ZGVariableQualifier)self->_documentData.qualifierTag, self->_functionType, firstSearchResults, laterSearchResults);
 				
-				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:ZGAllNumbers];
+				self->_temporarySearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:numberSearchResults dataType:dataType];
 			}
 		}
 		

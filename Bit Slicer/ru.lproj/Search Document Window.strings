@@ -155,6 +155,9 @@
 /* Class = "NSMenuItem"; title = "All Numbers"; ObjectID = "aNm-Rs-7Lk"; */
 "aNm-Rs-7Lk.title" = "Все числа";
 
+/* Class = "NSMenuItem"; title = "32/64-bit Integer"; ObjectID = "Wd4-7t-Kq2"; */
+"Wd4-7t-Kq2.title" = "32/64-разрядное число";
+
 /* Class = "NSTableColumn"; headerCell.title = "Value"; ObjectID = "aom-rv-8rE"; */
 "aom-rv-8rE.headerCell.title" = "Значение";
 

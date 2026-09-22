@@ -157,11 +157,17 @@
 /* Error Message for when trying address type search for all numbers */
 "addressTypeNotSupportedForAllNumbers" = "Поиск адресов памяти не поддерживается для типа «Все числа». Вместо этого выберите тип данных значения, на которое указывает указатель.";
 
+/* Error Message for when trying address type search for 32-bit and 64-bit integers */
+"addressTypeNotSupportedFor32And64BitIntegers" = "Поиск адресов памяти не поддерживается для типа «32/64-разрядное число». Вместо этого выберите тип данных значения, на которое указывает указатель.";
+
 /* Error Message for when the offset value cannot be parsed */
 "addressTypeIndirectOffsetParseError" = "The offset value could not be parsed.";
 
 /* Error message for when the selected data type to seach is a numerical one, and the expression cannot be parsed */
 "invalidNumericalSearchExpressionErrorMessage" = "Поисковое значение должно быть числовым.";
+
+/* Error message for when searching 32-bit and 64-bit integers, and they can't hold the numbers being searched for */
+"numbersNotHeldBy32And64BitIntegersErrorMessage" = "Искомые числа не помещаются в 32- или 64-разрядные целые числа. Искать можно только целые числа, и они не могут быть отрицательными, если выбрано «Не знаковый».";
 
 /* Error Message when attempting to do stored value byte array search */
 "storedValueSearchUnsupportedForByteArrays" = "Сравнение сохраненных значений не работает для Байтовых массивов";

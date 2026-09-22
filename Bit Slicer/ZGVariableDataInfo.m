@@ -64,6 +64,7 @@ ZGMemorySize ZGDataSizeFromNumericalDataType(ZGProcessType processType, ZGVariab
 		case ZGByteArray:
 		case ZGScript:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			dataSize = 0;
 			break;
 	}
@@ -92,7 +93,35 @@ ZGMemorySize ZGDataAlignment(ZGProcessType processType, ZGVariableType dataType,
 	return dataAlignment;
 }
 
-NSArray<NSNumber *> *ZGAllNumbersDataTypes(void)
+NSArray<NSNumber *> *ZGMultipleNumberDataTypes(ZGVariableType dataType)
 {
-	return @[@(ZGInt8), @(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)];
+	NSArray<NSNumber *> *dataTypes;
+	switch (dataType)
+	{
+		case ZGAllNumbers:
+			dataTypes = @[@(ZGInt8), @(ZGInt16), @(ZGInt32), @(ZGInt64), @(ZGFloat), @(ZGDouble)];
+			break;
+		case ZGInt32AndInt64:
+			dataTypes = @[@(ZGInt32), @(ZGInt64)];
+			break;
+		case ZGInt8:
+		case ZGInt16:
+		case ZGInt32:
+		case ZGInt64:
+		case ZGFloat:
+		case ZGDouble:
+		case ZGString8:
+		case ZGString16:
+		case ZGPointer:
+		case ZGByteArray:
+		case ZGScript:
+			dataTypes = @[];
+			break;
+	}
+	return dataTypes;
+}
+
+BOOL ZGIsMultipleNumberDataType(ZGVariableType dataType)
+{
+	return (ZGMultipleNumberDataTypes(dataType).count > 0);
 }

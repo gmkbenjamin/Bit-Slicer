@@ -43,6 +43,7 @@
 #import "ZGProcessList.h"
 #import "ZGProcess.h"
 #import "ZGVariableTypes.h"
+#import "ZGVariableDataInfo.h"
 #import "ZGRunningProcess.h"
 #import "ZGPreferencesController.h"
 #import "ZGDocumentData.h"
@@ -652,6 +653,7 @@
 				case ZGFloat:
 				case ZGDouble:
 				case ZGAllNumbers:
+				case ZGInt32AndInt64:
 					break;
 			}
 		}
@@ -808,6 +810,7 @@
 			case ZGString8:
 			case ZGString16:
 			case ZGAllNumbers:
+			case ZGInt32AndInt64:
 				needsQualifier = NO;
 				break;
 		}
@@ -1821,7 +1824,7 @@
 	ZGVariable *variable = [[self selectedVariables] objectAtIndex:0];
 	
 	// Searching addresses needs the data type of the value being pointed to
-	if ([self selectedDataType] == ZGAllNumbers)
+	if (ZGIsMultipleNumberDataType([self selectedDataType]))
 	{
 		[self selectDataTypeWithTag:variable.type recordUndo:YES];
 	}

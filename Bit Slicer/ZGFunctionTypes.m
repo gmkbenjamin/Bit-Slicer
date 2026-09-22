@@ -212,6 +212,7 @@ BOOL ZGSupportsEndianness(ZGVariableType dataType)
 		case ZGString16:
 		case ZGPointer:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			supportsEndianness = YES;
 			break;
 	}

@@ -222,6 +222,7 @@ void *ZGSwappedValue(ZGProcessType processType, const void *value, ZGVariableTyp
 		case ZGScript:
 		case ZGPointer:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			break;
 	}
 	
@@ -259,6 +260,7 @@ BOOL ZGNumberValueEqualsDoubleValue(const void *value, ZGVariableType dataType, 
 		case ZGByteArray:
 		case ZGScript:
 		case ZGAllNumbers:
+		case ZGInt32AndInt64:
 			return NO;
 	}
 
