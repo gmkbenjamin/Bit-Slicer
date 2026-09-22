@@ -886,6 +886,72 @@
 	XCTAssertNil([int8SearchResults searchResultsWithDataType:ZGInt16]);
 }
 
+- (void)testMultipleDataTypesStoredValueSearch
+{
+	ZGMemoryAddress address = [self allocateDataIntoProcess];
+	
+	int32_t int32Value = 100;
+	float floatValue = 100.0f;
+	if (!ZGWriteBytes(_processTask, address + 0x20, &int32Value, sizeof(int32Value))) XCTFail(@"Failed to write int32 value");
+	if (!ZGWriteBytes(_processTask, address + 0x30, &floatValue, sizeof(floatValue))) XCTFail(@"Failed to write float value");
+	
+	NSArray<NSNumber *> *dataTypes = @[@(ZGInt32), @(ZGFloat)];
+	NSArray<ZGSearchData *> *searchDataArray = @[
+		[self searchDataFromBytes:&int32Value size:sizeof(int32Value) dataType:ZGInt32 address:address alignment:sizeof(int32Value)],
+		[self searchDataFromBytes:&floatValue size:sizeof(floatValue) dataType:ZGFloat address:address alignment:sizeof(floatValue)]
+	];
+	
+	// Values of unknown data types can be found by how they change compared to stored values
+	ZGStoredData *savedData = [ZGStoredData storedDataFromProcessTask:_processTask beginAddress:address endAddress:address + _data.length protectionMode:searchDataArray[0].protectionMode includeSharedMemory:NO];
+	XCTAssertNotNil(savedData);
+	for (ZGSearchData *searchData in searchDataArray)
+	{
+		searchData.savedData = savedData;
+		searchData.shouldCompareStoredValues = YES;
+	}
+	
+	int32_t increasedInt32Value = 150;
+	float increasedFloatValue = 150.0f;
+	if (!ZGWriteBytes(_processTask, address + 0x20, &increasedInt32Value, sizeof(increasedInt32Value))) XCTFail(@"Failed to increase int32 value");
+	if (!ZGWriteBytes(_processTask, address + 0x30, &increasedFloatValue, sizeof(increasedFloatValue))) XCTFail(@"Failed to increase float value");
+	
+	NSArray<ZGSearchResults *> *searchResultsArray = ZGSearchForDataOfTypes(_processTask, searchDataArray, nil, dataTypes, ZGSigned, ZGGreaterThanStored);
+	XCTAssertEqual(searchResultsArray.count, dataTypes.count);
+	
+	// Only values that changed are found, although the changed bytes can be found as either data type
+	for (ZGSearchResults *searchResults in searchResultsArray)
+	{
+		for (NSNumber *resultAddress in [self addressesFromSearchResults:searchResults])
+		{
+			XCTAssertTrue(resultAddress.unsignedLongLongValue >= address + 0x20 && resultAddress.unsignedLongLongValue < address + 0x34);
+		}
+	}
+	XCTAssertTrue([[self addressesFromSearchResults:searchResultsArray[0]] containsObject:@(address + 0x20)]);
+	XCTAssertTrue([[self addressesFromSearchResults:searchResultsArray[1]] containsObject:@(address + 0x30)]);
+	
+	// Narrowing down with values stored again finds only the value that decreased since then
+	ZGStoredData *newSavedData = [ZGStoredData storedDataFromProcessTask:_processTask beginAddress:address endAddress:address + _data.length protectionMode:searchDataArray[0].protectionMode includeSharedMemory:NO];
+	XCTAssertNotNil(newSavedData);
+	for (ZGSearchData *searchData in searchDataArray)
+	{
+		searchData.savedData = newSavedData;
+	}
+	
+	int32_t decreasedInt32Value = 120;
+	if (!ZGWriteBytes(_processTask, address + 0x20, &decreasedInt32Value, sizeof(decreasedInt32Value))) XCTFail(@"Failed to decrease int32 value");
+	
+	ZGSearchResults *firstSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:@[[self searchResultsWithAddresses:@[] dataType:ZGInt32], [self searchResultsWithAddresses:@[] dataType:ZGFloat]] dataType:ZGAllNumbers];
+	ZGSearchResults *laterSearchResults = [[ZGSearchResults alloc] initWithDataTypeSearchResults:searchResultsArray dataType:ZGAllNumbers];
+	
+	NSArray<ZGSearchResults *> *narrowSearchResultsArray = ZGNarrowSearchForDataOfTypes(_processTask, NO, searchDataArray, nil, dataTypes, ZGSigned, ZGLessThanStored, firstSearchResults, laterSearchResults);
+	XCTAssertEqual(narrowSearchResultsArray.count, dataTypes.count);
+	
+	NSArray<NSNumber *> *narrowInt32Addresses = [self addressesFromSearchResults:narrowSearchResultsArray[0]];
+	XCTAssertTrue([narrowInt32Addresses containsObject:@(address + 0x20)]);
+	XCTAssertFalse([narrowInt32Addresses containsObject:@(address + 0x30)]);
+	XCTAssertFalse([[self addressesFromSearchResults:narrowSearchResultsArray[1]] containsObject:@(address + 0x30)]);
+}
+
 - (void)testInt32AndInt64Search
 {
 	ZGMemoryAddress address = [self allocateDataIntoProcess];
